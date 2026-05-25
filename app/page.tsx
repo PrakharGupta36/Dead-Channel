@@ -1,6 +1,7 @@
 "use client";
 
 import HUD from "@/components/hud/HUD";
+import BorderWalls from "@/components/scene/BorderWalls";
 import Ground from "@/components/scene/Ground";
 import Lights from "@/components/scene/Lights";
 import Player from "@/components/scene/Player";
@@ -49,6 +50,7 @@ export default function Scene() {
           {/* physics */}
           <Physics gravity={[0, -9.81, 0]}>
             <Ground />
+            <BorderWalls />
             <Trees />
             <Player />
           </Physics>

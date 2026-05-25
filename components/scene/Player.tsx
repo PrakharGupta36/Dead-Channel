@@ -1,6 +1,5 @@
 import Ecctrl from "ecctrl";
 
-
 export default function Player() {
   return (
     <Ecctrl
@@ -8,7 +7,7 @@ export default function Player() {
       camCollision
       maxVelLimit={6}
       jumpVel={5}
-      position={[0, 5, 0]}
+      position={[0, 1, 0]}
       camInitDis={-5}
       camMaxDis={-10}
       turnVelMultiplier={1}

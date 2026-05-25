@@ -31,28 +31,7 @@ export default function ControlsCard() {
         shadow-[0_0.5px_0px_#ffffff10_inset,0_1px_1px_#ffffff08_inset,0_10px_20px_-12px_#00000090]
       "
     >
-      {/* HEADER */}
-      <div className="mb-4 flex items-center gap-3">
-        <div
-          className="
-            flex
-            size-9
-            items-center
-            justify-center
-            rounded-2xl
-            bg-[#101010]
-            shadow-[0_0.5px_0_#ffffff15,0_2px_5px_#00000090_inset]
-          "
-        >
-          <Keyboard size={15} className="text-white/60" />
-        </div>
-
-        <div>
-          <p className="text-sm font-medium text-white/85">Controls</p>
-
-          <p className="text-[11px] text-white/35">Third person movement</p>
-        </div>
-      </div>
+      
 
       {/* CONTROLS */}
       <div className="space-y-2">
