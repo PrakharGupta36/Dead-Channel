@@ -1,31 +1,32 @@
 "use client";
 
-import { OrbitControls } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
+import { Physics } from "@react-three/rapier";
 
-import Ground from "./Ground";
 import Player from "./Player";
 import RemotePlayers from "./RemotePlayers";
+import World from "./World";
 
 export default function Scene() {
   return (
-    <Canvas camera={{ position: [0, 6, 10], fov: 60 }} className="bg-black">
+    <Canvas
+      shadows
+      camera={{ position: [0, 8, 12], fov: 60 }}
+      className="bg-black"
+    >
       {/* Lights */}
-      <ambientLight intensity={1} />
-      <directionalLight position={[5, 10, 5]} intensity={2} />
+      <ambientLight intensity={0.5} />
+
+      <directionalLight castShadow position={[10, 10, 5]} intensity={2} />
 
       {/* Fog */}
-      <fog attach="fog" args={["#000000", 10, 40]} />
+      <fog attach="fog" args={["#000000", 10, 50]} />
 
-      {/* World */}
-      <Ground />
-
-      {/* Players */}
-      <Player />
-      <RemotePlayers />
-
-      {/* Temp camera controls */}
-      <OrbitControls />
+      <Physics>
+        <World />
+        <Player />
+        <RemotePlayers />
+      </Physics>
     </Canvas>
   );
 }
