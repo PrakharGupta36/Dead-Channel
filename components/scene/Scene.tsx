@@ -6,13 +6,14 @@ import Ground from "@/components/scene/Ground";
 import Lights from "@/components/scene/Lights";
 import Trees from "@/components/scene/Trees";
 import { Controls } from "@/lib/controls";
-import { KeyboardControls } from "@react-three/drei";
+import { KeyboardControls, Loader } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
 
 import PlayerManager from "@/components/multiplayer/PlayerManager";
 import { startPlayroom } from "@/lib/playroom";
 import { useEffect, useState } from "react";
+import PerformanceStats from "../debug/PerformanceStats";
 
 export default function Scene() {
   const [playroomReady, setPlayroomReady] = useState(false);
@@ -44,8 +45,7 @@ export default function Scene() {
         >
           <Lights />
 
-          {/* fog */}
-          <fog attach="fog" args={["#ffffff", 20, 60]} />
+          <fog attach="fog" args={["#ffffff", 40, 60]} />
 
           {/* lighting */}
           <ambientLight intensity={0.4} />
@@ -67,6 +67,8 @@ export default function Scene() {
             {playroomReady && <PlayerManager />}
           </Physics>
         </Canvas>
+        <PerformanceStats />
+        <Loader />
       </KeyboardControls>
 
       {/* UI */}
