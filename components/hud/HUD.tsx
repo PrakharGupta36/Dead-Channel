@@ -5,7 +5,7 @@ import { ChevronUp, Keyboard } from "lucide-react";
 import { useEffect, useState } from "react";
 
 const controls = [
-  ["W A S D", "Move"],
+  ["WASD", "Move"],
   ["SHIFT", "Sprint"],
   ["SPACE", "Jump"],
   ["MOUSE", "Camera"],
@@ -35,7 +35,7 @@ export default function HUD() {
   useEffect(() => {
     const timeout = setTimeout(() => {
       setShowHint(false);
-    }, 8000);
+    }, 5000);
 
     return () => clearTimeout(timeout);
   }, []);
@@ -91,7 +91,6 @@ export default function HUD() {
                 shadow-[0_1px_0.5px_#ffffff1a_inset,0_1px_1px_#ffffff20_inset,0_10px_10px_-9px_#00000070,0_20px_20px_-14px_#00000080,0_0px_6px_0px_#00000060]
               "
             >
-              {/* TOP */}
               <div
                 className="
                   mb-3

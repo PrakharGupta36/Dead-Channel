@@ -14,6 +14,8 @@ import PlayerManager from "@/components/multiplayer/PlayerManager";
 import { startPlayroom } from "@/lib/playroom";
 import { useEffect, useState } from "react";
 import PerformanceStats from "../debug/PerformanceStats";
+import Guns from "../models/Guns";
+import WeaponSpawner from "../weapons/WeaponSpawner";
 
 export default function Scene() {
   const [playroomReady, setPlayroomReady] = useState(false);
@@ -25,7 +27,7 @@ export default function Scene() {
   }, []);
 
   return (
-    <div className="w-screen h-screen">
+    <div className="w-screen h-screen select-none">
       <KeyboardControls
         map={[
           { name: Controls.forward, keys: ["KeyW", "ArrowUp"] },
@@ -65,6 +67,8 @@ export default function Scene() {
             <Trees />
             {/* Only mount PlayerManager after Playroom is initialised */}
             {playroomReady && <PlayerManager />}
+
+            <WeaponSpawner />
           </Physics>
         </Canvas>
         <PerformanceStats />

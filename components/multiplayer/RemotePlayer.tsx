@@ -6,6 +6,7 @@ import { CapsuleCollider, RigidBody } from "@react-three/rapier";
 import { usePlayerState } from "playroomkit";
 import { useRef } from "react";
 import * as THREE from "three";
+import EquippedWeapon from "../weapons/EquippedWeapon";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Props = { player: any };
@@ -21,6 +22,7 @@ export default function RemotePlayer({ player }: Props) {
   const [color] = usePlayerState(player, "color", "#ffffff");
   const [name] = usePlayerState(player, "name", "Player");
   const [health] = usePlayerState(player, "health", 100);
+  const [weapon] = usePlayerState(player, "weapon", null);
 
   useFrame((_, delta) => {
     if (!rbRef.current || !Array.isArray(position)) return;
@@ -55,6 +57,8 @@ export default function RemotePlayer({ player }: Props) {
           <capsuleGeometry args={[0.5, 1]} />
           <meshStandardMaterial color={color} />
         </mesh>
+
+        {weapon && <EquippedWeapon weapon={weapon} isLocal />}
 
         <Html position={[0, 2.2, 0]} center distanceFactor={10} occlude>
           <div className="pointer-events-none select-none">
