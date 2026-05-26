@@ -78,10 +78,16 @@ export default function WeaponPickup({ id, type, position, onPickup }: Props) {
       </RigidBody>
 
       <group
-        scale={type === "pistol" ? 0.4 : type === "smg" ? 0.8 : 1}
-        position={type === "pistol" ? [0, -1, 0] : [0, 0, 0]}
+        scale={type === "pistol" ? 0.4 : type === "smg" ? 0.7 : .7}
+        position={
+          type === "pistol"
+            ? [0, -1, 0]
+            : type === "smg"
+              ? [0, -.5, 0]
+              : [0, -.5, 0]
+        }
       >
-        <Float speed={1} rotationIntensity={0.6} floatIntensity={1.2}>
+        <Float speed={3} rotationIntensity={0.6} floatIntensity={1.8}>
           {/* GLOW ORB */}
           <mesh scale={2}>
             <sphereGeometry args={[1, 24, 24]} />
@@ -96,13 +102,13 @@ export default function WeaponPickup({ id, type, position, onPickup }: Props) {
           <Guns
             position={
               type === "pistol"
-                ? [-1, -1.7, 5.2]
+                ? [-.8, -1.8, 5.8]
                 : type === "smg"
-                  ? [-1, -2.5, 0]
-                  : [0, 0, 0]
+                  ? [-.7, -2, 0]
+                  : [-.8, 0, 0]
             }
             type={type}
-            scale={type === "pistol" ? 0.8 : type === "ak47" ? 0.9 : 1}
+            scale={type === "pistol" ? 0.9 : type === "ak47" ? 0.7 : .7}
             rotation={[0, Math.PI / 2, 0]}
           />
         </Float>
@@ -110,7 +116,7 @@ export default function WeaponPickup({ id, type, position, onPickup }: Props) {
 
       {/* INTERACTION UI */}
       {nearby && (
-        <Html center position={[0, 2.2, 0]}>
+        <Html center occlude  position={[0, 2.2, 0]}>
           <motion.div
             initial={{
               opacity: 0,
@@ -140,6 +146,7 @@ export default function WeaponPickup({ id, type, position, onPickup }: Props) {
               text-white
               backdrop-blur-xl
               shadow-[0_4px_20px_#00000060]
+              relative top-52
             "
           >
             Press <span className="font-bold text-green-400">E</span> to equip{" "}

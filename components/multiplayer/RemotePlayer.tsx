@@ -35,6 +35,22 @@ export default function RemotePlayer({ player }: Props) {
     const lerpFactor = 1 - Math.pow(0.01, delta);
     _current.lerp(_target, lerpFactor);
 
+    if (meshGroupRef.current) {
+      const dirX = _target.x - _current.x;
+
+      const dirZ = _target.z - _current.z;
+
+      if (Math.abs(dirX) > 0.001 || Math.abs(dirZ) > 0.001) {
+        const angle = Math.atan2(dirX, dirZ);
+
+        meshGroupRef.current.rotation.y = THREE.MathUtils.lerp(
+          meshGroupRef.current.rotation.y,
+          angle,
+          0.15,
+        );
+      }
+    }
+
     rbRef.current.setNextKinematicTranslation(_current);
   });
 
