@@ -1,3 +1,4 @@
+// components/scene/Scene.tsx
 "use client";
 
 import HUD from "@/components/hud/HUD";
@@ -11,22 +12,17 @@ import { Canvas } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
 
 import PlayerManager from "@/components/multiplayer/shared/PlayerManager";
-import { startPlayroom } from "@/lib/playroom";
-import { useEffect, useState } from "react";
 import PerformanceStats from "../debug/PerformanceStats";
 import WeaponSpawner from "../weapons/WeaponSpawner";
 
-export default function Scene() {
-  const [playroomReady, setPlayroomReady] = useState(false);
+// Add the prop interface
+interface SceneProps {
+  gameStarted: boolean;
+}
 
-  useEffect(() => {
-    startPlayroom().then(() => {
-      setPlayroomReady(true);
-    });
-  }, []);
-
+export default function Scene({ gameStarted }: SceneProps) {
   return (
-    <div className="w-screen h-screen select-none">
+    <div className="w-full h-full select-none">
       <KeyboardControls
         map={[
           { name: Controls.forward, keys: ["KeyW", "ArrowUp"] },
@@ -45,10 +41,7 @@ export default function Scene() {
           }}
         >
           <Lights />
-
           <fog attach="fog" args={["#ffffff", 40, 60]} />
-
-          {/* lighting */}
           <ambientLight intensity={0.4} />
 
           <directionalLight
@@ -59,23 +52,26 @@ export default function Scene() {
             shadow-mapSize-height={2048}
           />
 
-          {/* physics */}
           <Physics gravity={[0, -9.81, 0]}>
             <Ground />
             <BorderWalls />
             <Trees />
-            {/* Only mount PlayerManager after Playroom is initialised */}
-            {playroomReady && <PlayerManager />}
 
-            <WeaponSpawner />
+            {/* Only mount gameplay mechanics AFTER the lobby phase ends */}
+            {gameStarted && (
+              <>
+                <PlayerManager />
+                <WeaponSpawner />
+              </>
+            )}
           </Physics>
         </Canvas>
-        <PerformanceStats />
+        {gameStarted && <PerformanceStats />}
         <Loader />
       </KeyboardControls>
 
-      {/* UI */}
-      <HUD />
+      {/* Only show the gameplay HUD when the game is active */}
+      {gameStarted && <HUD />}
     </div>
   );
 }

@@ -1,12 +1,6 @@
 "use client";
 
 import { Controls } from "@/lib/controls";
-import { useKeyboardControls } from "@react-three/drei";
-import { useFrame, useThree } from "@react-three/fiber";
-import { CapsuleCollider, RigidBody } from "@react-three/rapier";
-import { myPlayer, usePlayerState, usePlayersList } from "playroomkit";
-import { useEffect, useRef, useState } from "react";
-import * as THREE from "three";
 import {
   CAM_DIST,
   CAM_HEIGHT,
@@ -23,6 +17,12 @@ import {
   _moveDir,
   _up,
 } from "@/lib/playerConstants";
+import { useKeyboardControls } from "@react-three/drei";
+import { useFrame, useThree } from "@react-three/fiber";
+import { CapsuleCollider, RigidBody } from "@react-three/rapier";
+import { myPlayer, usePlayerState, usePlayersList } from "playroomkit";
+import { useEffect, useRef, useState } from "react";
+import * as THREE from "three";
 import PlayerBody from "./shared/PlayerBody";
 
 export default function LocalPlayer() {
@@ -70,7 +70,6 @@ export default function LocalPlayer() {
 
   const [health] = useState(100);
 
-  // ── Pointer-drag camera ──────────────────────────────────────────────────
   useEffect(() => {
     let dragging = false;
 
@@ -105,7 +104,6 @@ export default function LocalPlayer() {
     };
   }, []);
 
-  // ── Initial player state ─────────────────────────────────────────────────
   useEffect(() => {
     if (!player) return;
     player.setState("health", health);
@@ -113,7 +111,6 @@ export default function LocalPlayer() {
     player.setState("name", playerName);
   }, [player, color, playerName, health]);
 
-  // ── Per-frame: movement, camera, net-sync ────────────────────────────────
   useFrame((_, delta) => {
     const rb = rbRef.current;
     if (!rb) return;
@@ -144,7 +141,6 @@ export default function LocalPlayer() {
       true,
     );
 
-    // Face movement direction
     if (_moveDir.lengthSq() > 0.001 && meshGroupRef.current) {
       meshGroupRef.current.rotation.y = THREE.MathUtils.lerp(
         meshGroupRef.current.rotation.y,
@@ -153,13 +149,11 @@ export default function LocalPlayer() {
       );
     }
 
-    // Jump (only when grounded — |vy| < threshold)
     const freshVel = rb.linvel();
     if (jump && Math.abs(freshVel.y) < 0.05) {
       rb.setLinvel({ x: freshVel.x, y: JUMP_VEL, z: freshVel.z }, true);
     }
 
-    // Camera orbit
     const t = rb.translation();
     _lookAt.lerp(
       new THREE.Vector3(t.x, t.y + CAM_HEIGHT, t.z),
