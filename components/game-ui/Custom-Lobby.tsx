@@ -300,66 +300,6 @@ export default function CustomLobby({ onGameStart }: CustomLobbyProps) {
               </motion.div>
             </AnimatePresence>
           </div>
-
-          <div
-            className="
-              bg-gradient-to-b from-[#202020] to-[#191919]
-              border border-[#2a2a2a]/40
-              rounded-2xl p-4 sm:p-5
-              flex flex-col gap-4
-              shadow-[0_1px_0.5px_#ffffff1a_inset,0_1px_1px_#ffffff35_inset,0_10px_10px_-9px_#00000070,0_20px_20px_-14px_#00000060]
-            "
-          >
-            {/* Header */}
-            <div className="flex items-center gap-2 border-b border-zinc-800 pb-3">
-              <Zap className="w-4 h-4 text-zinc-400" />
-              <h3 className="text-xs font-mono font-bold tracking-widest text-zinc-400 uppercase">
-                Execution Control
-              </h3>
-            </div>
-
-            {/* Player count summary */}
-            <div className="flex items-center justify-between bg-[#0a0a0a] border border-zinc-900 rounded-xl px-4 py-3 shadow-[0_0.5px_0_#ffffff20,0_2px_6px_#00000090_inset]">
-              <span className="text-[11px] font-mono text-zinc-500 uppercase tracking-wider">
-                Players
-              </span>
-              <span className="text-sm font-black font-mono text-zinc-200">
-                {players.length}
-                <span className="text-zinc-600">/4</span>
-              </span>
-            </div>
-
-            {/* Start button — host only */}
-            {host ? (
-              <motion.button
-                type="button"
-                onClick={handleStartGame}
-                disabled={startReady || players.length < 1}
-                whileHover={!startReady ? { scale: 1.02 } : {}}
-                whileTap={!startReady ? { scale: 0.97 } : {}}
-                className="
-                  relative w-full h-12 sm:h-14 rounded-xl
-                  font-mono font-black text-xs sm:text-sm uppercase tracking-[0.2em]
-                  overflow-hidden
-                  transition-all duration-200
-                  disabled:opacity-40 disabled:cursor-not-allowed
-                  bg-gradient-to-b from-red-600 to-red-700
-                  border border-red-500/40
-                  text-white
-                  shadow-[0_1px_0_#ff000030_inset,0_-1px_0_#00000050_inset,0_4px_20px_rgba(220,38,38,0.3)]
-                  hover:shadow-[0_1px_0_#ff000030_inset,0_-1px_0_#00000050_inset,0_4px_30px_rgba(220,38,38,0.5)]
-                  flex items-center justify-center gap-2
-                "
-              >
-                {startReady ? "Launching..." : "Begin"}
-              </motion.button>
-            ) : (
-              <div className="w-full h-12 sm:h-14 rounded-xl bg-[#0a0a0a] border border-zinc-900 flex items-center justify-center gap-2 text-zinc-500 font-mono text-[11px] uppercase tracking-wider shadow-[0_0.5px_0_#ffffff20,0_2px_6px_#00000090_inset]">
-                <div className="w-3.5 h-3.5 border-2 border-zinc-700 border-t-red-500 rounded-full animate-spin shrink-0" />
-                Awaiting Host Command
-              </div>
-            )}
-          </div>
         </motion.section>
 
         {/* ================= CENTER ================= */}
@@ -490,9 +430,38 @@ export default function CustomLobby({ onGameStart }: CustomLobbyProps) {
               ))}
             </AnimatePresence>
           </div>
-        </section>
 
-        
+          {/* Start button — host only */}
+          {host ? (
+            <motion.button
+              type="button"
+              onClick={handleStartGame}
+              disabled={startReady || players.length < 1}
+              whileHover={!startReady ? { scale: 1.02 } : {}}
+              whileTap={!startReady ? { scale: 0.97 } : {}}
+              className="
+                  relative w-full h-12 sm:h-14 rounded-xl
+                  font-mono font-black text-xs sm:text-sm uppercase tracking-[0.2em]
+                  overflow-hidden
+                  transition-all duration-200
+                  disabled:opacity-40 disabled:cursor-not-allowed
+                  bg-gradient-to-b from-red-600 to-red-700
+                  border border-red-500/40
+                  text-white
+                  shadow-[0_1px_0_#ff000030_inset,0_-1px_0_#00000050_inset,0_4px_20px_rgba(220,38,38,0.3)]
+                  hover:shadow-[0_1px_0_#ff000030_inset,0_-1px_0_#00000050_inset,0_4px_30px_rgba(220,38,38,0.5)]
+                  flex items-center justify-center gap-2
+                "
+            >
+              {startReady ? "Launching..." : "Begin"}
+            </motion.button>
+          ) : (
+            <div className="w-full h-12 sm:h-14 rounded-xl bg-[#0a0a0a] border border-zinc-900 flex items-center justify-center gap-2 text-zinc-500 font-mono text-[11px] uppercase tracking-wider shadow-[0_0.5px_0_#ffffff20,0_2px_6px_#00000090_inset]">
+              <div className="w-3.5 h-3.5 border-2 border-zinc-700 border-t-red-500 rounded-full animate-spin shrink-0" />
+              Awaiting Host Command
+            </div>
+          )}
+        </section>
       </main>
 
       {/* ================= FOOTER ================= */}
