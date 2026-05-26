@@ -2,8 +2,8 @@
 
 import { myPlayer, usePlayersList } from "playroomkit";
 
-import LocalPlayer from "./LocalPlayer";
-import RemotePlayer from "./RemotePlayer";
+import LocalPlayer from "../LocalPlayer";
+import RemotePlayer from "../RemotePlayer";
 
 export default function PlayerManager() {
   // usePlayersList(true) triggers re-render when the list changes

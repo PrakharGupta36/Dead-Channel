@@ -10,11 +10,10 @@ import { KeyboardControls, Loader } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
 
-import PlayerManager from "@/components/multiplayer/PlayerManager";
+import PlayerManager from "@/components/multiplayer/shared/PlayerManager";
 import { startPlayroom } from "@/lib/playroom";
 import { useEffect, useState } from "react";
 import PerformanceStats from "../debug/PerformanceStats";
-import Guns from "../models/Guns";
 import WeaponSpawner from "../weapons/WeaponSpawner";
 
 export default function Scene() {

@@ -1,18 +1,15 @@
 "use client";
 
-import { Html } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import { CapsuleCollider, RigidBody } from "@react-three/rapier";
 import { usePlayerState } from "playroomkit";
 import { useRef } from "react";
 import * as THREE from "three";
-import EquippedWeapon from "../weapons/EquippedWeapon";
+import PlayerBody from "./shared/PlayerBody";
+import { _remoteCurrent, _remoteTarget } from "@/lib/playerConstants";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Props = { player: any };
-
-const _target = new THREE.Vector3();
-const _current = new THREE.Vector3();
 
 export default function RemotePlayer({ player }: Props) {
   const rbRef = useRef<any>(null);
@@ -27,72 +24,49 @@ export default function RemotePlayer({ player }: Props) {
   useFrame((_, delta) => {
     if (!rbRef.current || !Array.isArray(position)) return;
 
-    _target.set(position[0], position[1], position[2]);
+    _remoteTarget.set(position[0], position[1], position[2]);
 
     const t = rbRef.current.translation();
-    _current.set(t.x, t.y, t.z);
+    _remoteCurrent.set(t.x, t.y, t.z);
+    _remoteCurrent.lerp(_remoteTarget, 1 - Math.pow(0.01, delta));
 
-    const lerpFactor = 1 - Math.pow(0.01, delta);
-    _current.lerp(_target, lerpFactor);
-
+    // Face movement direction
     if (meshGroupRef.current) {
-      const dirX = _target.x - _current.x;
-
-      const dirZ = _target.z - _current.z;
-
-      if (Math.abs(dirX) > 0.001 || Math.abs(dirZ) > 0.001) {
-        const angle = Math.atan2(dirX, dirZ);
-
+      const dx = _remoteTarget.x - _remoteCurrent.x;
+      const dz = _remoteTarget.z - _remoteCurrent.z;
+      if (Math.abs(dx) > 0.001 || Math.abs(dz) > 0.001) {
         meshGroupRef.current.rotation.y = THREE.MathUtils.lerp(
           meshGroupRef.current.rotation.y,
-          angle,
+          Math.atan2(dx, dz),
           0.15,
         );
       }
     }
 
-    rbRef.current.setNextKinematicTranslation(_current);
+    rbRef.current.setNextKinematicTranslation(_remoteCurrent);
   });
+
+  const initialPos = Array.isArray(position)
+    ? (position as [number, number, number])
+    : ([0, 0, 0] as [number, number, number]);
 
   return (
     <RigidBody
       ref={rbRef}
       type="kinematicPosition"
       colliders={false}
-      position={
-        Array.isArray(position)
-          ? [position[0], position[1], position[2]]
-          : [0, 0, 0]
-      }
+      position={initialPos}
     >
       <CapsuleCollider args={[0.5, 0.5]} />
 
-      <group ref={meshGroupRef}>
-        {/* Same +0.5 offset as LocalPlayer so both sit at identical visual Y */}
-        <mesh castShadow position={[0, 0.5, 0]}>
-          <capsuleGeometry args={[0.5, 1]} />
-          <meshStandardMaterial color={color} />
-        </mesh>
-
-        {weapon && <EquippedWeapon weapon={weapon} isLocal />}
-
-        <Html position={[0, 2.2, 0]} center distanceFactor={10} occlude>
-          <div className="pointer-events-none select-none">
-            <div
-              className="mb-1 text-center text-xs font-bold drop-shadow"
-              style={{ color }}
-            >
-              {name}
-            </div>
-            <div className="h-3 w-24 overflow-hidden rounded-full border border-black/40 bg-black/50">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-green-500 to-green-300"
-                style={{ width: `${Math.max(0, Math.min(100, health))}%` }}
-              />
-            </div>
-          </div>
-        </Html>
-      </group>
+      <PlayerBody
+        ref={meshGroupRef}
+        color={color}
+        name={name}
+        health={health}
+        weapon={weapon}
+        isLocal={false}
+      />
     </RigidBody>
   );
 }
