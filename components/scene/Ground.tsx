@@ -4,9 +4,7 @@ import { useMemo } from "react";
 import { RigidBody } from "@react-three/rapier";
 import * as THREE from "three";
 
-// ─────────────────────────────────────────────
-// Reusable Elevation Function
-// ─────────────────────────────────────────────
+
 export function getTerrainHeight(x: number, z: number): number {
   // 1. Gentle rolling landscape ripples (stretched out and maxed out at 1.2 units height)
   const gentleRoll = Math.sin(x * 0.02) * Math.cos(z * 0.02) * 1.2;

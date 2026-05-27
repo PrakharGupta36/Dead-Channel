@@ -1,4 +1,3 @@
-// components/scene/Scene.tsx
 "use client";
 
 import HUD from "@/components/hud/HUD";
@@ -10,6 +9,7 @@ import { Controls } from "@/lib/controls";
 import { KeyboardControls, Loader } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
+import { useMemo } from "react";
 import * as THREE from "three";
 
 import PlayerManager from "@/components/multiplayer/shared/PlayerManager";
@@ -21,47 +21,57 @@ interface SceneProps {
   gameStarted: boolean;
 }
 
+const KEYBOARD_MAP = [
+  { name: Controls.forward, keys: ["KeyW", "ArrowUp"] },
+  { name: Controls.backward, keys: ["KeyS", "ArrowDown"] },
+  { name: Controls.leftward, keys: ["KeyA", "ArrowLeft"] },
+  { name: Controls.rightward, keys: ["KeyD", "ArrowRight"] },
+  { name: Controls.jump, keys: ["Space"] },
+  { name: Controls.run, keys: ["Shift"] },
+];
+
 export default function Scene({ gameStarted }: SceneProps) {
+
+  const glOptions = useMemo(
+    () => ({
+      antialias: false,
+      powerPreference: "high-performance" as const,
+      toneMapping: THREE.ACESFilmicToneMapping,
+      outputColorSpace: THREE.SRGBColorSpace,
+      preserveDrawingBuffer: false, 
+    }),
+    [],
+  );
+
+  const cameraOptions = useMemo(
+    () => ({
+      position: [0, 30, 60] as [number, number, number],
+      fov: 45,
+    }),
+    [],
+  );
+
   return (
-    <div className="w-full h-full select-none">
-      <KeyboardControls
-        map={[
-          { name: Controls.forward, keys: ["KeyW", "ArrowUp"] },
-          { name: Controls.backward, keys: ["KeyS", "ArrowDown"] },
-          { name: Controls.leftward, keys: ["KeyA", "ArrowLeft"] },
-          { name: Controls.rightward, keys: ["KeyD", "ArrowRight"] },
-          { name: Controls.jump, keys: ["Space"] },
-          { name: Controls.run, keys: ["Shift"] },
-        ]}
-      >
+    <div className="w-full h-full select-none overflow-hidden contain-strict">
+      <KeyboardControls map={KEYBOARD_MAP}>
         <Canvas
-          shadows="soft" // Smooth shadow filtering with less overhead
-          gl={{
-            antialias: false, // PERFORMANCE BOOST: Disable MSAA if you are rendering high-res low-poly layouts
-            powerPreference: "high-performance", // Hints the browser to force dedicated GPU usage
-            toneMapping: THREE.ACESFilmicToneMapping,
-            outputColorSpace: THREE.SRGBColorSpace,
-          }}
-          camera={{ position: [0, 30, 60], fov: 45 }}
+          shadows="soft"
+          gl={glOptions}
+          camera={cameraOptions}
+         
+          dpr={[.5, 1]}
+         
+          frameloop="always"
         >
-          {/* Manages all environmental ambient, sun shadows, and horizon fog colors */}
           <Lights />
 
-          {/* FIXED: Removed the second, redundant directionalLight from here entirely */}
-
-          {/* PERFORMANCE BOOST: Locked timestep and enabled interpolation 
-              to eliminate physics stuttering during heavy frames */}
           <Physics gravity={[0, -9.81, 0]} updateLoop="independent">
             <Ground />
             <BorderWalls />
             <Trees />
 
-            {gameStarted && (
-              <>
-                <PlayerManager />
-                <WeaponSpawner />
-              </>
-            )}
+            <PlayerManager active={gameStarted} />
+            <WeaponSpawner active={gameStarted} />
           </Physics>
         </Canvas>
 

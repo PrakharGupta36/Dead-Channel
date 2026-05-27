@@ -1,19 +1,16 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 "use client";
 
 import { AnimatePresence, motion, Variants } from "framer-motion";
 import { ChevronDown, Copy, Lock, Shield, UserPlus } from "lucide-react";
-
 import Image from "next/image";
-
 import {
-  getState,
   isHost,
   myPlayer,
-  onPlayerJoin,
   PlayerState,
   setState,
+  useMultiplayerState,
 } from "playroomkit";
-
 import { useEffect, useRef, useState } from "react";
 
 import {
@@ -26,6 +23,49 @@ import {
 
 interface CustomLobbyProps {
   onGameStart: () => void;
+}
+
+function useRealTimePlayers() {
+  const [players, setPlayers] = useState<PlayerState[]>([]);
+
+  useEffect(() => {
+    // Import dynamically or get from core package safely
+    const { onPlayerJoin } = require("playroomkit");
+
+    const activePlayers = new Map<string, PlayerState>();
+
+    const unsubscribe = onPlayerJoin((player: PlayerState) => {
+      activePlayers.set(player.id, player);
+      setPlayers(Array.from(activePlayers.values()));
+
+      // Listen to deep network state updates (like callsign overrides) for this specific player
+      player.onQuit(() => {
+        activePlayers.delete(player.id);
+        setPlayers(Array.from(activePlayers.values()));
+      });
+    });
+
+    const { onSync } = require("playroomkit");
+    let unsubscribeSync: () => void = () => {};
+
+    try {
+      unsubscribeSync = onSync(() => {
+        setPlayers(Array.from(activePlayers.values()));
+      });
+    } catch (e) {
+      const interval = setInterval(() => {
+        setPlayers(Array.from(activePlayers.values()));
+      }, 300);
+      unsubscribeSync = () => clearInterval(interval);
+    }
+
+    return () => {
+      unsubscribe();
+      unsubscribeSync();
+    };
+  }, []);
+
+  return players;
 }
 
 const backdropVariants: Variants = {
@@ -66,8 +106,6 @@ const renameModalVariants: Variants = {
   },
   exit: { opacity: 0, scale: 0.96, y: 8, transition: { duration: 0.15 } },
 };
-
-// ================== RENAME MODAL ==================
 
 interface RenameModalProps {
   currentName: string;
@@ -122,7 +160,6 @@ function RenameModal({ currentName, onCommit, onCancel }: RenameModalProps) {
           shadow-[0_0_0_1px_#ffffff08_inset,0_32px_64px_rgba(0,0,0,0.8)]
         "
       >
-        {/* Header */}
         <div className="px-5 pt-5 pb-4 border-b border-zinc-800/60 flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-red-500/15 border border-red-500/25 flex items-center justify-center shrink-0">
             <svg
@@ -147,7 +184,6 @@ function RenameModal({ currentName, onCommit, onCancel }: RenameModalProps) {
           </div>
         </div>
 
-        {/* Input */}
         <div className="px-5 py-5 space-y-3">
           <div className="relative">
             <input
@@ -230,10 +266,9 @@ function RenameModal({ currentName, onCommit, onCancel }: RenameModalProps) {
   );
 }
 
-// ================== MAIN COMPONENT ==================
-
 export default function CustomLobby({ onGameStart }: CustomLobbyProps) {
-  const [players, setPlayers] = useState<PlayerState[]>([]);
+  const players = useRealTimePlayers();
+
   const [objective, setObjective] = useState<string>("20_kills");
   const [copied, setCopied] = useState(false);
   const [startReady, setStartReady] = useState(false);
@@ -243,26 +278,13 @@ export default function CustomLobby({ onGameStart }: CustomLobbyProps) {
   const host = isHost();
   const me = myPlayer();
 
+  const [gameStarted] = useMultiplayerState("gameStarted", false);
+
   useEffect(() => {
-    const unsubscribeJoin = onPlayerJoin((player: PlayerState) => {
-      setPlayers((prev) => {
-        if (prev.some((p) => p.id === player.id)) return prev;
-        return [...prev, player];
-      });
-      player.onQuit(() => {
-        setPlayers((prev) => prev.filter((p) => p.id !== player.id));
-      });
-    });
-
-    const checkStartInterval = setInterval(() => {
-      if (getState("gameStarted")) onGameStart();
-    }, 200);
-
-    return () => {
-      clearInterval(checkStartInterval);
-      unsubscribeJoin();
-    };
-  }, [onGameStart]);
+    if (gameStarted) {
+      onGameStart();
+    }
+  }, [gameStarted, onGameStart]);
 
   const handleStartGame = () => {
     if (!host) return;
@@ -270,8 +292,7 @@ export default function CustomLobby({ onGameStart }: CustomLobbyProps) {
     setTimeout(() => {
       setState("gameObjective", objective);
       setState("gameStarted", true);
-      onGameStart();
-    }, 400);
+    }, 200);
   };
 
   const copyInviteLink = async () => {
@@ -282,14 +303,15 @@ export default function CustomLobby({ onGameStart }: CustomLobbyProps) {
 
   const handleRenameCommit = (name: string) => {
     if (!me) return;
+
     me.setState("customName", name);
-    setPlayers((prev) => [...prev]);
     setShowRenameModal(false);
   };
 
   const isMe = (p: PlayerState) => me && p.id === me.id;
   const displayName = (p: PlayerState) =>
     (p.getState("customName") as string | undefined) ?? p.getProfile().name;
+
   const emptySlots = Math.max(0, 4 - players.length);
 
   return (
@@ -442,7 +464,7 @@ export default function CustomLobby({ onGameStart }: CustomLobbyProps) {
                   const mine = isMe(p);
                   return (
                     <motion.div
-                      key={p.id}
+                      key={`player-${p.id}`}
                       layout
                       variants={playerSlotVariants}
                       initial="hidden"
@@ -463,7 +485,6 @@ export default function CustomLobby({ onGameStart }: CustomLobbyProps) {
                           : undefined
                       }
                     >
-                      {/* YOU badge */}
                       {mine && (
                         <div className="absolute top-2.5 right-2.5 text-[9px] font-mono font-black uppercase tracking-widest bg-red-500/20 text-red-400 border border-red-500/30 px-1.5 py-0.5 rounded">
                           YOU
@@ -471,7 +492,6 @@ export default function CustomLobby({ onGameStart }: CustomLobbyProps) {
                       )}
 
                       <div className="flex items-start gap-2 sm:gap-4">
-                        {/* Avatar */}
                         <div
                           className="
                           relative w-12 h-12 sm:w-16 sm:h-16 shrink-0 rounded-xl
@@ -492,7 +512,6 @@ export default function CustomLobby({ onGameStart }: CustomLobbyProps) {
                           </div>
                         </div>
 
-                        {/* Name block */}
                         <div className="min-w-0 flex-1 pt-0.5">
                           <h3 className="font-mono font-bold tracking-wide text-zinc-200 text-sm sm:text-base truncate pr-10">
                             {displayName(p)}
@@ -503,13 +522,11 @@ export default function CustomLobby({ onGameStart }: CustomLobbyProps) {
                         </div>
                       </div>
 
-                      {/* Footer row */}
                       <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-zinc-800/70 flex items-center justify-between gap-2 font-mono">
                         <span className="text-zinc-500 font-bold uppercase tracking-widest text-[9px] sm:text-[10px]">
                           Status Matrix
                         </span>
                         <div className="flex items-center gap-2">
-                          {/* Rename — proper tap target in footer */}
                           {mine && (
                             <button
                               type="button"

@@ -1,24 +1,25 @@
 "use client";
 
 import Guns from "@/components/models/Guns";
+import { getTerrainHeight } from "@/components/scene/Ground";
 import { WeaponType } from "@/lib/weapons";
 import { Html } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import { CuboidCollider, RigidBody } from "@react-three/rapier";
 import { AnimatePresence, motion } from "framer-motion";
 import { myPlayer } from "playroomkit";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 
 // ─────────────────────────────────────────────
-// Constants
+// Constants & Lookups
 // ─────────────────────────────────────────────
-
 const MAP_LIMIT = 60;
 const MIN_DISTANCE = 14;
-const WEAPON_COUNT = 15;
+const WEAPON_COUNT = 20;
 const PICKUP_DISTANCE = 4;
 const LOD_DISTANCE = 28;
+const LOD_DISTANCE_SQ = LOD_DISTANCE * LOD_DISTANCE;
 const FLOAT_SPEED = 0.8;
 const FLOAT_AMPLITUDE = 0.18;
 
@@ -41,28 +42,21 @@ const GUN_SCALES: Record<WeaponType, number> = {
   smg: 0.7,
   ak47: 0.7,
 };
-
 const GUN_OFFSETS: Record<WeaponType, [number, number, number]> = {
   pistol: [0, -1, 0],
   smg: [0, -0.5, 0],
   ak47: [0, -0.5, 0],
 };
-
 const GUN_INNER_POSITIONS: Record<WeaponType, [number, number, number]> = {
-  pistol: [-0.8, -1.8, 5.8],
+  pistol: [0, -4, 0],
   smg: [-0.7, -2, 0],
-  ak47: [-0.8, 0, 0],
+  ak47: [-0.8, -2, 0],
 };
-
 const GUN_INNER_SCALES: Record<WeaponType, number> = {
   pistol: 0.9,
   smg: 0.7,
   ak47: 0.7,
 };
-
-// ─────────────────────────────────────────────
-// Types
-// ─────────────────────────────────────────────
 
 type SpawnedWeapon = {
   id: string;
@@ -70,10 +64,6 @@ type SpawnedWeapon = {
   position: [number, number, number];
   phase: number;
 };
-
-// ─────────────────────────────────────────────
-// Seeded spawn generation
-// ─────────────────────────────────────────────
 
 function generateWeapons(): SpawnedWeapon[] {
   const positions: [number, number, number][] = [];
@@ -85,29 +75,36 @@ function generateWeapons(): SpawnedWeapon[] {
     return seed / 233280;
   };
 
-  const seededPos = (): [number, number, number] => [
-    (random() - 0.5) * MAP_LIMIT * 2,
-    2,
-    (random() - 0.5) * MAP_LIMIT * 2,
-  ];
+  const seededPos = (): [number, number, number] => {
+    const x = (random() - 0.5) * MAP_LIMIT * 2;
+    const z = (random() - 0.5) * MAP_LIMIT * 2;
+    return [x, getTerrainHeight(x, z) + 2, z];
+  };
 
   const farEnough = (
     p: [number, number, number],
     others: [number, number, number][],
-  ) =>
-    others.every((o) => {
-      const dx = p[0] - o[0];
-      const dz = p[2] - o[2];
-      return Math.sqrt(dx * dx + dz * dz) > MIN_DISTANCE;
-    });
+  ) => {
+    const px = p[0],
+      pz = p[2];
+    for (let i = 0; i < others.length; i++) {
+      const o = others[i];
+      const dx = px - o[0];
+      const dz = pz - o[2];
+      if (dx * dx + dz * dz <= MIN_DISTANCE * MIN_DISTANCE) return false;
+    }
+    return true;
+  };
 
   for (let i = 0; i < WEAPON_COUNT; i++) {
     let pos: [number, number, number];
+    let attempts = 0;
     do {
       pos = seededPos();
-    } while (!farEnough(pos, positions));
-    positions.push(pos);
+      attempts++;
+    } while (!farEnough(pos, positions) && attempts < 100);
 
+    positions.push(pos);
     weapons.push({
       id: `weapon-${i}`,
       type: WEAPON_TYPES[Math.floor(random() * WEAPON_TYPES.length)],
@@ -115,37 +112,31 @@ function generateWeapons(): SpawnedWeapon[] {
       phase: random() * Math.PI * 2,
     });
   }
-
   return weapons;
 }
 
 // ─────────────────────────────────────────────
-// Re-used frame temporaries
+// Shared Subsystem Execution
 // ─────────────────────────────────────────────
 
-const _playerPos = new THREE.Vector3();
-
-// ─────────────────────────────────────────────
-// ProximitySystem (Handles math & sets active ID)
-// ─────────────────────────────────────────────
-
-function ProximitySystem({
+function ProximityAndLODSystem({
   weapons,
   aliveSet,
   lightRef,
-  activePromptId,
+  htmlGroupRef,
   setActivePromptId,
   onPickup,
 }: {
   weapons: SpawnedWeapon[];
   aliveSet: React.MutableRefObject<Set<string>>;
   lightRef: React.RefObject<THREE.PointLight | null>;
-  activePromptId: string | null;
+  htmlGroupRef: React.RefObject<THREE.Group | null>;
   setActivePromptId: (id: string | null) => void;
   onPickup: (id: string) => void;
 }) {
   const player = myPlayer();
   const nearbyIdRef = useRef<string | null>(null);
+  const weaponRefs = useRef<Record<string, THREE.Group>>({});
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
@@ -162,153 +153,123 @@ function ProximitySystem({
   }, [weapons, player, onPickup]);
 
   useFrame(({ clock }) => {
-    if (!player) return;
-    const playerPosition = player.getState("position");
-    if (!Array.isArray(playerPosition)) return;
+    const t = clock.elapsedTime;
+    const currentAlive = aliveSet.current;
 
-    _playerPos.set(playerPosition[0], playerPosition[1], playerPosition[2]);
+    // 1. ANIMATE ALL ALIVE MESHES & COMPUTE UNIFIED LOD IN ONE PASS
+    const playerPosition = player?.getState("position");
+    const hasPlayer = Array.isArray(playerPosition);
+    const px = hasPlayer ? playerPosition[0] : 0;
+    const pz = hasPlayer ? playerPosition[2] : 0;
 
-    let closestDist = Infinity;
+    let closestDistSq = Infinity;
     let closestWeapon: SpawnedWeapon | null = null;
 
-    for (const w of weapons) {
-      if (!aliveSet.current.has(w.id)) continue;
-      const dx = w.position[0] - _playerPos.x;
-      const dz = w.position[2] - _playerPos.z;
-      const dist = Math.sqrt(dx * dx + dz * dz);
-      if (dist < closestDist) {
-        closestDist = dist;
-        closestWeapon = w;
+    for (let i = 0; i < weapons.length; i++) {
+      const w = weapons[i];
+      const meshGroup = weaponRefs.current[w.id];
+      if (!meshGroup) continue;
+
+      if (!currentAlive.has(w.id)) {
+        meshGroup.visible = false;
+        continue;
+      }
+
+      // Continuous Rotation & Floating Calculations
+      const floatingElement = meshGroup.children[0];
+      if (floatingElement) {
+        floatingElement.position.y =
+          Math.sin(t * FLOAT_SPEED + w.phase) * FLOAT_AMPLITUDE;
+        floatingElement.rotation.y = t * 0.4;
+      }
+
+      // LOD Check performed every frame directly via scene property manipulation (Zero-state overhead)
+      if (hasPlayer) {
+        const dx = w.position[0] - px;
+        const dz = w.position[2] - pz;
+        const distSq = dx * dx + dz * dz;
+
+        meshGroup.visible = distSq < LOD_DISTANCE_SQ;
+
+        if (distSq < closestDistSq) {
+          closestDistSq = distSq;
+          closestWeapon = w;
+        }
       }
     }
 
-    // Dynamic point light tracking
+    const closestDist = Math.sqrt(closestDistSq);
+
+    // 2. POSITION POINT LIGHT AND HTML ANCHOR GRAPHICS
     const light = lightRef.current;
     if (light && closestWeapon) {
-      const t = clock.elapsedTime;
-      const ly =
-        closestWeapon.position[1] +
-        Math.sin(t * FLOAT_SPEED + closestWeapon.phase) * FLOAT_AMPLITUDE;
-      light.position.set(
-        closestWeapon.position[0],
-        ly + 0.5,
-        closestWeapon.position[2],
-      );
-      light.color.copy(GLOW_COLORS[closestWeapon.type]);
-      light.intensity =
-        closestDist < 14 ? Math.max(0, (14 - closestDist) * 0.8) : 0;
+      if (closestDist < 14) {
+        const ly =
+          closestWeapon.position[1] +
+          Math.sin(t * FLOAT_SPEED + closestWeapon.phase) * FLOAT_AMPLITUDE;
+        light.position.set(
+          closestWeapon.position[0],
+          ly + 0.5,
+          closestWeapon.position[2],
+        );
+        light.color.copy(GLOW_COLORS[closestWeapon.type]);
+        light.intensity = (14 - closestDist) * 0.8;
+      } else {
+        light.intensity = 0;
+      }
     }
 
-    const isClose = closestWeapon !== null && closestDist < PICKUP_DISTANCE;
-    const currentNearbyId = isClose && closestWeapon ? closestWeapon.id : null;
-
+    // Process UI prompts matrix adjustments synchronously
+    const currentNearbyId =
+      closestWeapon && closestDist < PICKUP_DISTANCE ? closestWeapon.id : null;
     if (currentNearbyId !== nearbyIdRef.current) {
       nearbyIdRef.current = currentNearbyId;
       setActivePromptId(currentNearbyId);
     }
-  });
 
-  return null;
-}
-
-// ─────────────────────────────────────────────
-// LOD Gun + Relative 3D HTML Prompt
-// ─────────────────────────────────────────────
-
-function LODGun({
-  weapon,
-  showPrompt,
-}: {
-  weapon: SpawnedWeapon;
-  showPrompt: boolean;
-}) {
-  const groupRef = useRef<THREE.Group>(null);
-  const player = myPlayer();
-  const [visible, setVisible] = useState(false);
-  const frameCountRef = useRef(0);
-
-  useFrame(({ clock }) => {
-    const g = groupRef.current;
-    if (g && visible) {
-      const t = clock.elapsedTime;
-      g.position.y = Math.sin(t * FLOAT_SPEED + weapon.phase) * FLOAT_AMPLITUDE;
-      g.rotation.y = t * 0.4;
+    const htmlGroup = htmlGroupRef.current;
+    if (htmlGroup && closestWeapon && currentNearbyId) {
+      htmlGroup.position.set(
+        closestWeapon.position[0],
+        closestWeapon.position[1] + 0.5,
+        closestWeapon.position[2],
+      );
     }
-
-    frameCountRef.current++;
-    if (frameCountRef.current % 30 !== 0 || !player) return;
-    const pp = player.getState("position");
-    if (!Array.isArray(pp)) return;
-    const dx = weapon.position[0] - pp[0];
-    const dz = weapon.position[2] - pp[2];
-    const dist = Math.sqrt(dx * dx + dz * dz);
-    setVisible(dist < LOD_DISTANCE);
   });
-
-  if (!visible) return null;
 
   return (
-    <group position={weapon.position}>
-      <group
-        ref={groupRef}
-        scale={GUN_SCALES[weapon.type]}
-        position={GUN_OFFSETS[weapon.type]}
-      >
-        <Guns
-          position={GUN_INNER_POSITIONS[weapon.type]}
-          type={weapon.type}
-          scale={GUN_INNER_SCALES[weapon.type]}
-          rotation={[0, Math.PI / 2, 0]}
-        />
-      </group>
-
-      {/* 3D Projected HUD Text:
-        - We removed 'fullscreen' so it positions itself at [0, 1.2, 0] relative to this specific gun.
-        - 'center' ensures the div anchors smoothly at its midpoint.
-        - 'distanceFactor={8}' scales the text dynamically down if the player steps back so it doesn't look gigantic.
-      */}
-      <Html
-        position={[0, .5, 0]}
-        center
-        distanceFactor={8}
-        style={{ pointerEvents: "none", zIndex: 9999 }}
-      >
-        <div className="select-none pointer-events-none origin-center whitespace-nowrap">
-          <AnimatePresence>
-            {showPrompt && (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.6, y: 10 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.6, y: 10 }}
-                transition={{ duration: 0.15, ease: "easeOut" }}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/10 bg-zinc-950/90 text-white shadow-xl backdrop-blur-md"
-              >
-                <span className="text-xs font-medium tracking-wide">Press</span>
-                <kbd className="inline-flex h-5 items-center gap-1 rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 font-mono text-[10px] font-bold text-emerald-400 shadow-sm">
-                  E
-                </kbd>
-                <span className="text-xs font-medium tracking-wide">
-                  to equip
-                </span>
-                <span
-                  className={`text-xs font-black uppercase tracking-wider ${TEXT_COLORS[weapon.type]}`}
-                >
-                  {weapon.type}
-                </span>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-      </Html>
+    <group>
+      {weapons.map((w) => (
+        <group
+          key={w.id}
+          position={w.position}
+          ref={(el) => {
+            if (el) weaponRefs.current[w.id] = el;
+          }}
+        >
+          <group scale={GUN_SCALES[w.type]} position={GUN_OFFSETS[w.type]}>
+            <Guns
+              position={GUN_INNER_POSITIONS[w.type]}
+              type={w.type}
+              scale={GUN_INNER_SCALES[w.type]}
+              rotation={[0, Math.PI / 2, 0]}
+            />
+          </group>
+        </group>
+      ))}
     </group>
   );
 }
 
 // ─────────────────────────────────────────────
-// Main Component
+// Master Container Component
 // ─────────────────────────────────────────────
 
-export default function WeaponSpawner() {
+interface WeaponSpawnerProps {
+  active: boolean;
+}
+
+export default function WeaponSpawner({ active }: WeaponSpawnerProps) {
   const [weapons] = useState<SpawnedWeapon[]>(generateWeapons);
   const [aliveIds, setAliveIds] = useState<Set<string>>(
     () => new Set(weapons.map((w) => w.id)),
@@ -317,46 +278,94 @@ export default function WeaponSpawner() {
 
   const aliveSetRef = useRef<Set<string>>(aliveIds);
   const lightRef = useRef<THREE.PointLight>(null);
+  const htmlGroupRef = useRef<THREE.Group>(null);
 
-  const handlePickup = useCallback(
-    (id: string) => {
-      const nextSet = new Set(aliveSetRef.current);
-      nextSet.delete(id);
-      aliveSetRef.current = nextSet;
-      setAliveIds(nextSet);
-      if (activePromptId === id) setActivePromptId(null);
-    },
-    [activePromptId],
-  );
+  const handlePickup = useCallback((id: string) => {
+    const nextSet = new Set(aliveSetRef.current);
+    nextSet.delete(id);
+    aliveSetRef.current = nextSet;
+    setAliveIds(nextSet);
+    setActivePromptId((prev) => (prev === id ? null : prev));
+  }, []);
+
+  const activeWeaponData = useMemo(() => {
+    if (!activePromptId) return null;
+    return weapons.find((w) => w.id === activePromptId) || null;
+  }, [activePromptId, weapons]);
+
+  if (!active) return null;
 
   return (
     <>
-      {/* 1 shared dynamic weapon illumination point light */}
       <pointLight ref={lightRef} distance={10} intensity={0} />
 
-      {/* Shared interaction tracking system */}
-      <ProximitySystem
+      {/* 1. INSTANCED SINGLE RIGID BODY SYSTEM WITH COMPOUND COLLIDERS 
+          Reduces physics mesh validation overhead down to a single entity hook */}
+      <RigidBody type="fixed" colliders={false}>
+        {weapons.map((w) => {
+          if (!aliveIds.has(w.id)) return null;
+          return (
+            <CuboidCollider
+              key={`col-${w.id}`}
+              position={w.position}
+              args={[1, 1, 1]}
+            />
+          );
+        })}
+      </RigidBody>
+
+      {/* Combined System managing LOD and positions simultaneously */}
+      <ProximityAndLODSystem
         weapons={weapons}
         aliveSet={aliveSetRef}
         lightRef={lightRef}
-        activePromptId={activePromptId}
+        htmlGroupRef={htmlGroupRef}
         setActivePromptId={setActivePromptId}
         onPickup={handlePickup}
       />
 
-      {/* Physics colliders + LOD mesh processing */}
-      {weapons.map((w) => {
-        if (!aliveIds.has(w.id)) return null;
-
-        return (
-          <group key={w.id}>
-            <RigidBody type="fixed" colliders={false} position={w.position}>
-              <CuboidCollider args={[1, 1, 1]} />
-            </RigidBody>
-            <LODGun weapon={w} showPrompt={activePromptId === w.id} />
-          </group>
-        );
-      })}
+      {/* TRANSFORM HOISTED GRAPHICS WRAPPER PROMPT */}
+      <group ref={htmlGroupRef}>
+        {activeWeaponData && (
+          <Html
+            center
+            distanceFactor={8}
+            style={{ pointerEvents: "none", zIndex: 9999 }}
+          >
+            <div
+              className={`select-none pointer-events-none origin-center whitespace-nowrap relative ${
+                activeWeaponData.type === "pistol" ? "top-30" : "top-19 left-10"
+              }`}
+            >
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={activeWeaponData.id}
+                  initial={{ opacity: 0, scale: 0.6, y: 10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.6, y: 10 }}
+                  transition={{ duration: 0.15, ease: "easeOut" }}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-white/10 bg-zinc-950/90 text-white shadow-xl backdrop-blur-md"
+                >
+                  <span className="text-xs font-medium tracking-wide">
+                    Press
+                  </span>
+                  <kbd className="inline-flex h-5 items-center gap-1 rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 font-mono text-[10px] font-bold text-emerald-400 shadow-sm">
+                    E
+                  </kbd>
+                  <span className="text-xs font-medium tracking-wide">
+                    to equip
+                  </span>
+                  <span
+                    className={`text-xs font-black uppercase tracking-wider ${TEXT_COLORS[activeWeaponData.type]}`}
+                  >
+                    {activeWeaponData.type}
+                  </span>
+                </motion.div>
+              </AnimatePresence>
+            </div>
+          </Html>
+        )}
+      </group>
     </>
   );
 }
