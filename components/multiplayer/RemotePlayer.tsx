@@ -17,7 +17,8 @@ export default function RemotePlayer({ player }: Props) {
 
   const [position] = usePlayerState(player, "position", [0, 0, 0]);
   const [color] = usePlayerState(player, "color", "#ffffff");
-  const [name] = usePlayerState(player, "name", "Player");
+  // Read the synced "name" state (which LocalPlayer keeps up to date with customName)
+  const [name] = usePlayerState(player, "name", null);
   const [health] = usePlayerState(player, "health", 100);
   const [weapon] = usePlayerState(player, "weapon", null);
 
@@ -30,7 +31,6 @@ export default function RemotePlayer({ player }: Props) {
     _remoteCurrent.set(t.x, t.y, t.z);
     _remoteCurrent.lerp(_remoteTarget, 1 - Math.pow(0.01, delta));
 
-    // Face movement direction
     if (meshGroupRef.current) {
       const dx = _remoteTarget.x - _remoteCurrent.x;
       const dz = _remoteTarget.z - _remoteCurrent.z;
@@ -50,6 +50,9 @@ export default function RemotePlayer({ player }: Props) {
     ? (position as [number, number, number])
     : ([0, 0, 0] as [number, number, number]);
 
+  // Prefer the synced "name" state; fall back to profile name
+  const displayName = name ?? player.getProfile().name ?? "Player";
+
   return (
     <RigidBody
       ref={rbRef}
@@ -62,7 +65,7 @@ export default function RemotePlayer({ player }: Props) {
       <PlayerBody
         ref={meshGroupRef}
         color={color}
-        name={name}
+        playerId={displayName}
         health={health}
         weapon={weapon}
         isLocal={false}

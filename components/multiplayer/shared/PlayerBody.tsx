@@ -7,7 +7,7 @@ import * as THREE from "three";
 
 interface PlayerBodyProps {
   color: string;
-  name: string;
+  playerId: string; // Changed from 'name' to 'playerId'
   health: number;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   weapon: any;
@@ -16,28 +16,32 @@ interface PlayerBodyProps {
 }
 
 const PlayerBody = forwardRef<THREE.Group, PlayerBodyProps>(
-  ({ color, name, health, weapon, isLocal = false, label }, ref) => {
+  ({ color, playerId, health, weapon, isLocal = false, label }, ref) => {
     const clampedHealth = Math.max(0, Math.min(100, health));
 
     return (
-      <group ref={ref}>
+      <group ref={ref} position={[0, -0.5, 0]}>
         {/* Capsule body */}
         <mesh castShadow position={[0, 0.5, 0]}>
           <capsuleGeometry args={[0.5, 1]} />
           <meshStandardMaterial color={color} />
         </mesh>
 
-        {/* Weapon — positioned relative to body, NOT camera */}
-        {weapon && <EquippedWeapon weapon={weapon} isLocal={isLocal} />}
+        {/* PERFORMANCE FIX: Continuously mount the component. 
+            Toggle 3D object visibility instead of creating/destroying nodes. */}
+        <group visible={!!weapon}>
+          <EquippedWeapon weapon={weapon || "pistol"} isLocal={isLocal} />
+        </group>
 
         {/* Overhead nameplate + health bar */}
         <Html position={[0, 2.2, 0]} center distanceFactor={10} occlude>
           <div className="pointer-events-none relative top-8 select-none">
+            {/* Displaying playerId here instead of profile name */}
             <div
-              className="mb-1 text-center text-xs font-bold drop-shadow"
+              className="mb-1 text-center text-xs font-mono font-bold drop-shadow break-all max-w-[120px]"
               style={{ color }}
             >
-              {name}
+              {playerId}
               {label && (
                 <span className="font-normal opacity-60"> {label}</span>
               )}

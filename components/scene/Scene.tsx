@@ -10,12 +10,13 @@ import { Controls } from "@/lib/controls";
 import { KeyboardControls, Loader } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
+import * as THREE from "three";
 
 import PlayerManager from "@/components/multiplayer/shared/PlayerManager";
 import PerformanceStats from "../debug/PerformanceStats";
+import ActivityLog from "../hud/ActivityLog";
 import WeaponSpawner from "../weapons/WeaponSpawner";
 
-// Add the prop interface
 interface SceneProps {
   gameStarted: boolean;
 }
@@ -34,30 +35,27 @@ export default function Scene({ gameStarted }: SceneProps) {
         ]}
       >
         <Canvas
-          shadows
-          camera={{
-            position: [0, 5, 10],
-            fov: 50,
+          shadows="soft" // Smooth shadow filtering with less overhead
+          gl={{
+            antialias: false, // PERFORMANCE BOOST: Disable MSAA if you are rendering high-res low-poly layouts
+            powerPreference: "high-performance", // Hints the browser to force dedicated GPU usage
+            toneMapping: THREE.ACESFilmicToneMapping,
+            outputColorSpace: THREE.SRGBColorSpace,
           }}
+          camera={{ position: [0, 30, 60], fov: 45 }}
         >
+          {/* Manages all environmental ambient, sun shadows, and horizon fog colors */}
           <Lights />
-          <fog attach="fog" args={["#ffffff", 40, 60]} />
-          <ambientLight intensity={0.4} />
 
-          <directionalLight
-            castShadow
-            intensity={1.5}
-            position={[20, 30, 10]}
-            shadow-mapSize-width={2048}
-            shadow-mapSize-height={2048}
-          />
+          {/* FIXED: Removed the second, redundant directionalLight from here entirely */}
 
-          <Physics gravity={[0, -9.81, 0]}>
+          {/* PERFORMANCE BOOST: Locked timestep and enabled interpolation 
+              to eliminate physics stuttering during heavy frames */}
+          <Physics gravity={[0, -9.81, 0]} updateLoop="independent">
             <Ground />
             <BorderWalls />
             <Trees />
 
-            {/* Only mount gameplay mechanics AFTER the lobby phase ends */}
             {gameStarted && (
               <>
                 <PlayerManager />
@@ -66,11 +64,13 @@ export default function Scene({ gameStarted }: SceneProps) {
             )}
           </Physics>
         </Canvas>
+
         {gameStarted && <PerformanceStats />}
         <Loader />
       </KeyboardControls>
 
-      {/* Only show the gameplay HUD when the game is active */}
+      <ActivityLog />
+
       {gameStarted && <HUD />}
     </div>
   );

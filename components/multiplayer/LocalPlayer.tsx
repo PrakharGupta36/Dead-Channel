@@ -41,19 +41,12 @@ export default function LocalPlayer() {
   const pitch = useRef(0.4);
 
   const [weapon] = usePlayerState(player, "weapon", null);
+  // Subscribe to customName so the label updates reactively
+  const [customName] = usePlayerState(player, "customName", null);
 
   const [color] = useState(
     () => COLORS[Math.floor(Math.random() * COLORS.length)],
   );
-
-  const [playerName] = useState(() => {
-    const adj = ["Swift", "Bold", "Calm", "Fierce", "Sly", "Brave"];
-    const noun = ["Fox", "Wolf", "Bear", "Eagle", "Tiger", "Hawk"];
-    return (
-      adj[Math.floor(Math.random() * adj.length)] +
-      noun[Math.floor(Math.random() * noun.length)]
-    );
-  });
 
   const [spawnPosition] = useState<[number, number, number]>(() => {
     const me = player?.id;
@@ -108,8 +101,10 @@ export default function LocalPlayer() {
     if (!player) return;
     player.setState("health", health);
     player.setState("color", color);
-    player.setState("name", playerName);
-  }, [player, color, playerName, health]);
+    // Sync the resolved display name so remote players read it from state
+    const displayName = customName ?? player.getProfile().name;
+    player.setState("name", displayName);
+  }, [player, color, health, customName]);
 
   useFrame((_, delta) => {
     const rb = rbRef.current;
@@ -118,11 +113,9 @@ export default function LocalPlayer() {
     const { forward, backward, leftward, rightward, jump, run } = getKeys();
     const speed = run ? RUN_SPEED : WALK_SPEED;
 
-    // Camera-relative directions
     _camFwd.set(Math.sin(yaw.current), 0, Math.cos(yaw.current)).normalize();
     _camRight.crossVectors(_camFwd, _up).normalize();
 
-    // Build move direction
     _moveDir.set(0, 0, 0);
     if (forward) _moveDir.add(_camFwd);
     if (backward) _moveDir.sub(_camFwd);
@@ -130,7 +123,6 @@ export default function LocalPlayer() {
     if (leftward) _moveDir.sub(_camRight);
     if (_moveDir.lengthSq() > 0) _moveDir.normalize();
 
-    // Apply velocity
     const vel = rb.linvel();
     rb.setLinvel(
       {
@@ -167,7 +159,6 @@ export default function LocalPlayer() {
     camera.position.lerp(_camPos, 1 - Math.exp(-8 * delta));
     camera.lookAt(_lookAt);
 
-    // Network sync (throttled)
     const now = performance.now();
     if (player && now - lastNetSync.current > NET_SYNC_INTERVAL_MS) {
       player.setState("position", [t.x, t.y, t.z], false);
@@ -176,6 +167,9 @@ export default function LocalPlayer() {
   });
 
   if (!player) return null;
+
+  // Prefer customName, fall back to profile name
+  const displayName = customName ?? player.getProfile().name ?? "Player";
 
   return (
     <RigidBody
@@ -192,7 +186,7 @@ export default function LocalPlayer() {
       <PlayerBody
         ref={meshGroupRef}
         color={color}
-        name={playerName}
+        playerId={displayName}
         health={health}
         weapon={weapon}
         isLocal
