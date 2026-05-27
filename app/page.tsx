@@ -1,44 +1,22 @@
+// app/page.tsx (or pages/index.tsx)
 "use client";
 
+import CustomLobby from "@/components/game-ui/Custom-Lobby";
+import Scene from "@/components/scene/Scene";
 import { startPlayroom } from "@/lib/playroom";
 import { Loader2 } from "lucide-react";
-import dynamic from "next/dynamic";
-import { useEffect, useState, useTransition } from "react";
-
-// 1. Dynamic import with SSR disabled keeps Three.js/WebGL code out of the initial server bundle
-const Scene = dynamic(() => import("@/components/scene/Scene"), {
-  ssr: false,
-  loading: () => null,
-});
-
-const CustomLobby = dynamic(() => import("@/components/game-ui/Custom-Lobby"), {
-  ssr: false,
-});
+import { useEffect, useState } from "react";
 
 export default function Home() {
   const [playroomReady, setPlayroomReady] = useState(false);
   const [gameStarted, setGameStarted] = useState(false);
-  const [, startTransition] = useTransition();
 
   useEffect(() => {
-    let isMounted = true;
-
-    // Fire and forget asset pre-fetching could also be triggered here if available
+    // Initialize Playroom once when the app loads
     startPlayroom().then(() => {
-      if (isMounted) setPlayroomReady(true);
+      setPlayroomReady(true);
     });
-
-    return () => {
-      isMounted = false;
-    };
   }, []);
-
-  // Optimized State Transition Handler to avoid blocking the main thread
-  const handleGameStart = () => {
-    startTransition(() => {
-      setGameStarted(true);
-    });
-  };
 
   if (!playroomReady) {
     return (
@@ -52,14 +30,10 @@ export default function Home() {
   }
 
   return (
-    <main className="relative w-screen h-screen bg-zinc-950 overflow-hidden select-none touch-none">
-      {/* Scene sits persistently; we pass gameStarted but ensure it's built to handle updates gracefully */}
+    <main className="relative w-screen h-screen bg-zinc-950">
       <Scene gameStarted={gameStarted} />
 
-      {/* Unmount explicitly using logical gates to completely drop DOM memory weights */}
-      {!gameStarted && (
-        <CustomLobby key="lobby-overlay" onGameStart={handleGameStart} />
-      )}
+      {!gameStarted && <CustomLobby onGameStart={() => setGameStarted(true)} />}
     </main>
   );
 }

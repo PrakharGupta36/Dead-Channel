@@ -34,7 +34,7 @@ const PlayerBody = forwardRef<THREE.Group, PlayerBodyProps>(
         </group>
 
         {/* Overhead nameplate + health bar */}
-        <Html position={[0, 2.2, 0]} center distanceFactor={10} occlude >
+        <Html position={[0, 2.2, 0]} center distanceFactor={10} occlude>
           <div className="pointer-events-none relative top-8 select-none">
             {/* Displaying playerId here instead of profile name */}
             <div
