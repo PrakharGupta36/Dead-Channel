@@ -7,7 +7,7 @@ import Grass, { GrassHandle } from "../models/Grass";
 
 export function getTerrainHeight(x: number, z: number): number {
   const gentleRoll = Math.sin(x * 0.02) * Math.cos(z * 0.02) * 1.2;
-  const minorBumps = Math.sin(x * 0.15) * Math.sin(z * 0.15) * 0.3;
+  const minorBumps = Math.sin(x * 0.15) * Math.sin(z * 0.15) * 1.3;
   return gentleRoll + minorBumps;
 }
 
