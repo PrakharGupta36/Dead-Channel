@@ -63,17 +63,7 @@ const PlayerBody = forwardRef<THREE.Group, PlayerBodyProps>(
       
       "
               >
-                {/* top reflection */}
-                <div className="pointer-events-none absolute inset-x-2 top-0 h-px bg-white/10" />
-
-                {/* subtle ambient glow */}
-                <div
-                  className="pointer-events-none absolute inset-0 opacity-20 blur-2xl"
-                  style={{
-                    background:
-                      "radial-gradient(circle at top, rgba(255,255,255,0.08), transparent 68%)",
-                  }}
-                />
+              
 
                 <div className="relative flex items-center gap-2">
                   <div
