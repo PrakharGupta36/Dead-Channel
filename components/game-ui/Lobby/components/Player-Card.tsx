@@ -89,6 +89,7 @@ export default function PlayerCard({
             <button
               type="button"
               onClick={onRename}
+              disabled={!player} // Safetynet
               className="
                 h-7 px-2.5 rounded-lg
                 bg-zinc-900 border border-zinc-700/60

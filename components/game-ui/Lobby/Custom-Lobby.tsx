@@ -58,9 +58,10 @@ export default function CustomLobby({ onGameStart }: CustomLobbyProps) {
   };
 
   const handleRenameCommit = (name: string) => {
-    if (!me) return;
+    const currentPlayer = myPlayer(); // pull fresh reference
+    if (!currentPlayer) return;
 
-    me.setState("customName", name);
+    currentPlayer.setState("customName", name);
     setShowRenameModal(false);
   };
 
@@ -72,16 +73,6 @@ export default function CustomLobby({ onGameStart }: CustomLobbyProps) {
 
   return (
     <>
-      <AnimatePresence>
-        {showRenameModal && me && (
-          <RenameModal
-            currentName={displayName(me)}
-            onCommit={handleRenameCommit}
-            onCancel={() => setShowRenameModal(false)}
-          />
-        )}
-      </AnimatePresence>
-
       <motion.div
         variants={backdropVariants}
         initial="hidden"
@@ -150,6 +141,16 @@ export default function CustomLobby({ onGameStart }: CustomLobbyProps) {
               onStart={handleStartGame}
             />
           </section>
+
+          <AnimatePresence>
+            {showRenameModal && (
+              <RenameModal
+                currentName={me ? displayName(me) : "Loading..."}
+                onCommit={handleRenameCommit}
+                onCancel={() => setShowRenameModal(false)}
+              />
+            )}
+          </AnimatePresence>
         </main>
       </motion.div>
     </>

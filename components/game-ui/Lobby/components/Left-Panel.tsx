@@ -53,7 +53,7 @@ export default function LeftPanel({
           <div className="flex items-center gap-2">
             <Shield className="w-4 h-4 text-zinc-400" />
             <h3 className="text-xs font-mono font-bold tracking-widest text-zinc-400 uppercase">
-              Operation Parametrics
+              Match Info
             </h3>
           </div>
           <motion.div

@@ -9,7 +9,7 @@ import { Controls } from "@/lib/controls";
 import { KeyboardControls, Loader } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import * as THREE from "three";
 
 import PlayerManager from "@/components/multiplayer/shared/PlayerManager";
@@ -31,6 +31,8 @@ const KEYBOARD_MAP = [
 ];
 
 export default function Scene({ gameStarted }: SceneProps) {
+  const localPlayerRef = useRef<THREE.Group>(null);
+
   const glOptions = useMemo(
     () => ({
       antialias: false,
@@ -45,7 +47,9 @@ export default function Scene({ gameStarted }: SceneProps) {
   const cameraOptions = useMemo(
     () => ({
       position: [0, 30, 60] as [number, number, number],
-      fov: 45,
+      fov: 65,
+      near: 0.1,
+      far: 300,
     }),
     [],
   );
@@ -57,13 +61,13 @@ export default function Scene({ gameStarted }: SceneProps) {
           shadows="soft"
           gl={glOptions}
           camera={cameraOptions}
-          dpr={[0.5, 1]}
+          dpr={[2, 1]}
           frameloop="always"
         >
           <Lights />
 
           <Physics gravity={[0, -9.81, 0]} updateLoop="independent">
-            <Ground />
+            <Ground visibleRadius={15} size={200} playerRef={localPlayerRef} />
             <BorderWalls />
             <Trees />
 

@@ -44,7 +44,7 @@ export default function RenameModal({
       exit={{ opacity: 0 }}
       transition={{ duration: 0.18 }}
       onClick={onCancel}
-      className="fixed inset-0 z-60 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4"
+      className="fixed inset-0 z-120 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4"
     >
       <motion.div
         variants={renameModalVariants}
@@ -148,7 +148,7 @@ export default function RenameModal({
                 flex-2 h-11 rounded-xl
                 bg-linear-to-b from-red-600 to-red-700
                 border border-red-500/40
-                font-mono text-xs font-black uppercase tracking-[0.18em]
+                font-mono text-xs px-4 font-black uppercase tracking-[0.18em]
                 text-white
                 shadow-[0_1px_0_#ff000030_inset,0_-1px_0_#00000050_inset,0_4px_20px_rgba(220,38,38,0.25)]
                 hover:shadow-[0_1px_0_#ff000030_inset,0_-1px_0_#00000050_inset,0_4px_24px_rgba(220,38,38,0.4)]

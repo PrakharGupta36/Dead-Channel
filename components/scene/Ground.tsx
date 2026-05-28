@@ -1,46 +1,42 @@
 "use client";
 
-import { useMemo } from "react";
 import { RigidBody } from "@react-three/rapier";
+import { useMemo, useRef } from "react";
 import * as THREE from "three";
-
+import Grass, { GrassHandle } from "../models/Grass";
 
 export function getTerrainHeight(x: number, z: number): number {
-  // 1. Gentle rolling landscape ripples (stretched out and maxed out at 1.2 units height)
   const gentleRoll = Math.sin(x * 0.02) * Math.cos(z * 0.02) * 1.2;
-
-  // 2. Micro surface bumps (frequent tiny variations maxed out at 0.3 units height)
   const minorBumps = Math.sin(x * 0.15) * Math.sin(z * 0.15) * 0.3;
-
   return gentleRoll + minorBumps;
 }
 
 interface GroundProps {
   size?: number;
   segments?: number;
+  playerRef: React.RefObject<THREE.Object3D | null>;
+  visibleRadius?: number;
   children?: React.ReactNode;
 }
 
 export default function Ground({
   size = 200,
   segments = 64,
+  playerRef,
+  visibleRadius = 45.0,
   children,
 }: GroundProps) {
-  // Generate the displacement math once on mount
+  const grassRef = useRef<GrassHandle>(null);
+
   const displacedGeometry = useMemo(() => {
     const geometry = new THREE.PlaneGeometry(size, size, segments, segments);
-    geometry.rotateX(-Math.PI / 2); // Align horizontally
+    geometry.rotateX(-Math.PI / 2);
 
     const positionAttribute = geometry.attributes.position;
-
     for (let i = 0; i < positionAttribute.count; i++) {
       const x = positionAttribute.getX(i);
       const z = positionAttribute.getZ(i);
-
-      // Use the global terrain utility function
-      const targetHeight = getTerrainHeight(x, z);
-
-      positionAttribute.setY(i, targetHeight);
+      positionAttribute.setY(i, getTerrainHeight(x, z));
     }
 
     geometry.computeVertexNormals();
@@ -49,18 +45,27 @@ export default function Ground({
 
   return (
     <>
-      {/* Physical Terrain */}
+      {/* Terrain */}
       <RigidBody type="fixed" colliders="trimesh">
         <mesh geometry={displacedGeometry} receiveShadow castShadow>
           <meshStandardMaterial
             color="#20ff30"
             roughness={0.8}
-            flatShading={true}
+            flatShading={false}
           />
         </mesh>
       </RigidBody>
 
-      {/* Render children (like your trees) with access to the scene map context */}
+      <Grass
+        ref={grassRef}
+        width={size}
+        height={size}
+        count={840000}
+        playerRef={playerRef}
+        visibleRadius={visibleRadius}
+        getHeight={getTerrainHeight}
+      />
+
       {children}
     </>
   );

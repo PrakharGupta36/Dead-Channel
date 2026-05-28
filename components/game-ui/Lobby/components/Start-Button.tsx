@@ -104,10 +104,8 @@ export default function StartButton({
       {/* subtle red ambient glow */}
       <div className="absolute inset-0 bg-red-500/3" />
 
-    
-
       {/* content */}
-      <div className="relative z-10 flex items-center justify-center gap-2">
+      <div className="relative flex items-center justify-center gap-2">
         <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]" />
 
         {startReady ? "Launching..." : "Begin"}
