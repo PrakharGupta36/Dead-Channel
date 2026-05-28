@@ -40,7 +40,7 @@ export default function LeftPanel({
     >
       <div
         className="
-              bg-gradient-to-b from-[#202020] to-[#191919]
+              bg-linear-to-b from-[#202020] to-[#191919]
               border border-[#2a2a2a]/40 rounded-2xl overflow-hidden
               shadow-[0_1px_0.5px_#ffffff1a_inset,0_1px_1px_#ffffff35_inset,0_10px_10px_-9px_#00000070,0_20px_20px_-14px_#00000060]
             "
@@ -71,7 +71,7 @@ export default function LeftPanel({
             initial={false}
             animate={{ height: paramsOpen ? "auto" : 0 }}
             transition={{ duration: 0.3, ease: [0.25, 1, 0.5, 1] }}
-            className="overflow-hidden lg:!h-auto"
+            className="overflow-hidden lg:h-auto!"
           >
             <div className="p-4 sm:p-5 space-y-4 lg:block">
               <div className="space-y-2">

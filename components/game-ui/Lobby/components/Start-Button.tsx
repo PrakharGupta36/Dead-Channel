@@ -23,7 +23,7 @@ export default function StartButton({
           relative w-full h-12 sm:h-14 rounded-2xl
           overflow-hidden
 
-          bg-gradient-to-b
+          bg-linear-to-b
           from-[#1f1f1f]
           via-[#121212]
           to-[#090909]
@@ -38,10 +38,10 @@ export default function StartButton({
 
           shadow-[0_2px_0_#3a3a3a_inset,0_-4px_8px_#000000_inset,0_8px_20px_rgba(0,0,0,0.5)]
 
-          before:absolute before:inset-[1px]
+          before:absolute before:inset-px
           before:rounded-[15px]
-          before:bg-gradient-to-b
-          before:from-white/[0.04]
+          before:bg-linear-to-b
+          before:from-white/4
           before:to-transparent
           before:pointer-events-none
         "
@@ -69,7 +69,7 @@ export default function StartButton({
         uppercase tracking-[0.22em]
         text-zinc-100
 
-        bg-gradient-to-b
+        bg-linear-to-b
         from-[#2d2d2d]
         via-[#1c1c1c]
         to-[#0d0d0d]
@@ -83,17 +83,17 @@ export default function StartButton({
         disabled:opacity-40
         disabled:cursor-not-allowed
 
-        before:absolute before:inset-[1px]
+        before:absolute before:inset-px
         before:rounded-[15px]
-        before:bg-gradient-to-b
-        before:from-white/[0.08]
+        before:bg-linear-to-b
+        before:from-white/8
         before:to-transparent
         before:pointer-events-none
 
         after:absolute after:left-0 after:top-0
         after:h-1/2 after:w-full
-        after:bg-gradient-to-b
-        after:from-white/[0.08]
+        after:bg-linear-to-b
+        after:from-white/8
         after:to-transparent
         after:pointer-events-none
 
@@ -102,10 +102,10 @@ export default function StartButton({
       "
     >
       {/* subtle red ambient glow */}
-      <div className="absolute inset-0 bg-red-500/[0.03]" />
+      <div className="absolute inset-0 bg-red-500/3" />
 
       {/* top metallic shine */}
-      <div className="absolute top-[2px] left-[6%] w-[88%] h-[1px] bg-white/15 blur-[0.5px]" />
+      <div className="absolute top-0.5 left-[6%] w-[88%] h-px bg-white/15 blur-[0.5px]" />
 
       {/* content */}
       <div className="relative z-10 flex items-center justify-center gap-2">

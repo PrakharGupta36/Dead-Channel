@@ -96,7 +96,7 @@ export default function CustomLobby({ onGameStart }: CustomLobbyProps) {
       >
         <main
           className="
-          flex-1 w-full max-w-[1600px] mx-auto
+          flex-1 w-full max-w-400 mx-auto
           px-3 sm:px-6 lg:px-8 py-3 sm:py-5 lg:py-8
           flex flex-col lg:grid lg:grid-cols-12
           gap-3 sm:gap-4 lg:gap-8 z-10

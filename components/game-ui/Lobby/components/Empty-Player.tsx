@@ -20,7 +20,7 @@ export default function EmptyPlayer({ index }: EmptyPlayerProps) {
       className="
         relative flex flex-col items-center justify-center
         p-3 sm:p-5
-        min-h-[100px] sm:min-h-[140px]
+        min-h-25 sm:min-h-35
         rounded-2xl
 
         bg-[#0e0e0e]/40

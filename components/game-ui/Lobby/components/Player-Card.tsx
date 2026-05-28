@@ -30,7 +30,7 @@ export default function PlayerCard({
       className="
         relative flex flex-col justify-between
         p-3 sm:p-5 rounded-2xl
-        bg-gradient-to-b from-[#202020] to-[#191919]
+        bg-linear-to-b from-[#202020] to-[#191919]
         border border-[#2b2b2b]/60 overflow-hidden group
         transition-all duration-300
         shadow-[0_1px_0.5px_#ffffff1a_inset,0_1px_1px_#ffffff35_inset,0_4px_6px_-2px_#00000080,0_10px_15px_-3px_#00000050]

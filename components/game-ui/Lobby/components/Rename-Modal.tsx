@@ -44,7 +44,7 @@ export default function RenameModal({
       exit={{ opacity: 0 }}
       transition={{ duration: 0.18 }}
       onClick={onCancel}
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4"
+      className="fixed inset-0 z-60 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4"
     >
       <motion.div
         variants={renameModalVariants}
@@ -54,7 +54,7 @@ export default function RenameModal({
         onClick={(e) => e.stopPropagation()}
         className="
           w-full max-w-sm
-          bg-gradient-to-b from-[#1e1e1e] to-[#171717]
+          bg-linear-to-b from-[#1e1e1e] to-[#171717]
           border border-[#2e2e2e] rounded-2xl overflow-hidden
           shadow-[0_0_0_1px_#ffffff08_inset,0_32px_64px_rgba(0,0,0,0.8)]
         "
@@ -123,7 +123,7 @@ export default function RenameModal({
             </div>
           </div>
 
-          <div className="h-px bg-gradient-to-r from-transparent via-zinc-700/40 to-transparent" />
+          <div className="h-px bg-linear-to-r from-transparent via-zinc-700/40 to-transparent" />
 
           <div className="flex gap-2 pt-1">
             <button
@@ -145,8 +145,8 @@ export default function RenameModal({
               disabled={!value.trim()}
               whileTap={{ scale: 0.97 }}
               className="
-                flex-[2] h-11 rounded-xl
-                bg-gradient-to-b from-red-600 to-red-700
+                flex-2 h-11 rounded-xl
+                bg-linear-to-b from-red-600 to-red-700
                 border border-red-500/40
                 font-mono text-xs font-black uppercase tracking-[0.18em]
                 text-white

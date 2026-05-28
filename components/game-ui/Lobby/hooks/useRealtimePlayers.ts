@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-require-imports */
 import { PlayerState } from "playroomkit";
 import { useEffect, useState } from "react";

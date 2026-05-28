@@ -80,11 +80,11 @@ export default function Trees({
     "/models/Trees.glb",
   ) as unknown as GLTFResult;
 
-  // 1. Calculate safe, separated map distribution coordinates
+ 
   const instances = useMemo<TreeInstance[]>(() => {
     const list: TreeInstance[] = [];
     const random = createRandom(seed);
-    const minDistanceBetweenTrees = 8; // Avoid trees overlapping or clipping inside each other
+    const minDistanceBetweenTrees = 8; 
 
     const farEnough = (pos: [number, number, number]) =>
       list.every((existing) => {
@@ -99,11 +99,9 @@ export default function Trees({
       let valid = false;
 
       while (!valid && attempts < 30) {
-        // Spread evenly across the map bounds centered on zero
         const x = (random() - 0.5) * mapSize;
         const z = (random() - 0.5) * mapSize;
 
-        // Read directly from the mathematical ground formula so trees stick perfectly
         const y = getTerrainHeight(x, z);
         pos = [x, y, z];
 
