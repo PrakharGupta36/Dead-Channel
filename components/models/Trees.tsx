@@ -6,11 +6,9 @@ import { CylinderCollider, RigidBody } from "@react-three/rapier";
 import { useMemo } from "react";
 import * as THREE from "three";
 import { GLTF } from "three-stdlib";
-import { getTerrainHeight } from "./Ground"; // Ensure this matches your Ground file path
+import { getTerrainHeight } from "@/components/scene/Ground"; 
 
-// ─────────────────────────────────────────────
-// TypeScript Definitions for the Asset File
-// ─────────────────────────────────────────────
+
 type GLTFResult = GLTF & {
   nodes: {
     _1_tree__1_tree_0: THREE.Mesh;

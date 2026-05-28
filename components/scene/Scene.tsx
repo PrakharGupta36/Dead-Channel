@@ -1,10 +1,10 @@
 "use client";
 
 import HUD from "@/components/hud/HUD";
+import Trees from "@/components/models/Trees";
 import BorderWalls from "@/components/scene/BorderWalls";
 import Ground from "@/components/scene/Ground";
 import Lights from "@/components/scene/Lights";
-import Trees from "@/components/scene/Trees";
 import { Controls } from "@/lib/controls";
 import { KeyboardControls, Loader } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
@@ -31,14 +31,13 @@ const KEYBOARD_MAP = [
 ];
 
 export default function Scene({ gameStarted }: SceneProps) {
-
   const glOptions = useMemo(
     () => ({
       antialias: false,
       powerPreference: "high-performance" as const,
       toneMapping: THREE.ACESFilmicToneMapping,
       outputColorSpace: THREE.SRGBColorSpace,
-      preserveDrawingBuffer: false, 
+      preserveDrawingBuffer: false,
     }),
     [],
   );
@@ -58,9 +57,7 @@ export default function Scene({ gameStarted }: SceneProps) {
           shadows="soft"
           gl={glOptions}
           camera={cameraOptions}
-         
-          dpr={[.5, 1]}
-         
+          dpr={[0.5, 1]}
           frameloop="always"
         >
           <Lights />
