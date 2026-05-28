@@ -1,7 +1,7 @@
 // app/page.tsx (or pages/index.tsx)
 "use client";
 
-import CustomLobby from "@/components/game-ui/Custom-Lobby";
+import CustomLobby from "@/components/game-ui/Lobby/Custom-Lobby";
 import Scene from "@/components/scene/Scene";
 import { startPlayroom } from "@/lib/playroom";
 import { Loader2 } from "lucide-react";
