@@ -252,7 +252,6 @@ export default function LocalPlayer() {
         health={health}
         weapon={weapon}
         isLocal
-        label="(You)"
         aimPitch={pitchRef}
         isAiming={isAiming}
       />
