@@ -7,23 +7,25 @@ import { Html } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import { CuboidCollider, RigidBody } from "@react-three/rapier";
 import { AnimatePresence, motion } from "framer-motion";
-import { myPlayer } from "playroomkit";
+import { isHost, myPlayer, useMultiplayerState } from "playroomkit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 
-// ─────────────────────────────────────────────
-// Constants & Lookups
-// ─────────────────────────────────────────────
+
 const MAP_LIMIT = 60;
 const MIN_DISTANCE = 14;
-const WEAPON_COUNT = 20;
 const PICKUP_DISTANCE = 4;
 const LOD_DISTANCE = 28;
 const LOD_DISTANCE_SQ = LOD_DISTANCE * LOD_DISTANCE;
 const FLOAT_SPEED = 0.8;
 const FLOAT_AMPLITUDE = 0.18;
 
-const WEAPON_TYPES: WeaponType[] = ["smg", "ak47", "pistol"];
+// ── Exact weapon pool: 15 pistols, 8 ak47s, 7 smgs ──
+const WEAPON_POOL: WeaponType[] = [
+  ...Array(15).fill("pistol"),
+  ...Array(8).fill("ak47"),
+  ...Array(7).fill("smg"),
+] as WeaponType[];
 
 const GLOW_COLORS: Record<WeaponType, THREE.Color> = {
   smg: new THREE.Color("#00d2ff"),
@@ -58,16 +60,23 @@ const GUN_INNER_SCALES: Record<WeaponType, number> = {
   ak47: 0.7,
 };
 
-type SpawnedWeapon = {
+// ─────────────────────────────────────────────
+// Shared World Weapon Type
+// ─────────────────────────────────────────────
+export type WorldWeapon = {
   id: string;
   type: WeaponType;
   position: [number, number, number];
   phase: number;
+  pickedUpBy: string | null; // player id, or null if on ground
 };
 
-function generateWeapons(): SpawnedWeapon[] {
+// ─────────────────────────────────────────────
+// Deterministic World Generation (same seed = same layout on all clients)
+// ─────────────────────────────────────────────
+function generateWorldWeapons(): WorldWeapon[] {
   const positions: [number, number, number][] = [];
-  const weapons: SpawnedWeapon[] = [];
+  const weapons: WorldWeapon[] = [];
   let seed = 1337;
 
   const random = () => {
@@ -96,7 +105,14 @@ function generateWeapons(): SpawnedWeapon[] {
     return true;
   };
 
-  for (let i = 0; i < WEAPON_COUNT; i++) {
+  // Shuffle the pool deterministically
+  const pool = [...WEAPON_POOL];
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+
+  for (let i = 0; i < pool.length; i++) {
     let pos: [number, number, number];
     let attempts = 0;
     do {
@@ -107,28 +123,26 @@ function generateWeapons(): SpawnedWeapon[] {
     positions.push(pos);
     weapons.push({
       id: `weapon-${i}`,
-      type: WEAPON_TYPES[Math.floor(random() * WEAPON_TYPES.length)],
+      type: pool[i],
       position: pos,
       phase: random() * Math.PI * 2,
+      pickedUpBy: null,
     });
   }
   return weapons;
 }
 
 // ─────────────────────────────────────────────
-// Shared Subsystem Execution
+// LOD + Proximity System (reads shared world state, no local alive tracking)
 // ─────────────────────────────────────────────
-
 function ProximityAndLODSystem({
   weapons,
-  aliveSet,
   lightRef,
   htmlGroupRef,
   setActivePromptId,
   onPickup,
 }: {
-  weapons: SpawnedWeapon[];
-  aliveSet: React.MutableRefObject<Set<string>>;
+  weapons: WorldWeapon[];
   lightRef: React.RefObject<THREE.PointLight | null>;
   htmlGroupRef: React.RefObject<THREE.Group | null>;
   setActivePromptId: (id: string | null) => void;
@@ -138,44 +152,42 @@ function ProximityAndLODSystem({
   const nearbyIdRef = useRef<string | null>(null);
   const weaponRefs = useRef<Record<string, THREE.Group>>({});
 
+  // Only ground weapons (not picked up by anyone)
+  const groundWeapons = useMemo(
+    () => weapons.filter((w) => w.pickedUpBy === null),
+    [weapons],
+  );
+
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (e.key.toLowerCase() !== "e") return;
       const nid = nearbyIdRef.current;
       if (!nid || !player) return;
-      const w = weapons.find((x) => x.id === nid);
+      const w = groundWeapons.find((x) => x.id === nid);
       if (!w) return;
-      player.setState("weapon", w.type);
       onPickup(nid);
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [weapons, player, onPickup]);
+  }, [groundWeapons, player, onPickup]);
 
   useFrame(({ clock }) => {
     const t = clock.elapsedTime;
-    const currentAlive = aliveSet.current;
 
-    // 1. ANIMATE ALL ALIVE MESHES & COMPUTE UNIFIED LOD IN ONE PASS
     const playerPosition = player?.getState("position");
     const hasPlayer = Array.isArray(playerPosition);
     const px = hasPlayer ? playerPosition[0] : 0;
     const pz = hasPlayer ? playerPosition[2] : 0;
 
     let closestDistSq = Infinity;
-    let closestWeapon: SpawnedWeapon | null = null;
+    let closestWeapon: WorldWeapon | null = null;
 
-    for (let i = 0; i < weapons.length; i++) {
-      const w = weapons[i];
+    for (let i = 0; i < groundWeapons.length; i++) {
+      const w = groundWeapons[i];
       const meshGroup = weaponRefs.current[w.id];
       if (!meshGroup) continue;
 
-      if (!currentAlive.has(w.id)) {
-        meshGroup.visible = false;
-        continue;
-      }
-
-      // Continuous Rotation & Floating Calculations
+      // Animate float + rotate
       const floatingElement = meshGroup.children[0];
       if (floatingElement) {
         floatingElement.position.y =
@@ -183,7 +195,6 @@ function ProximityAndLODSystem({
         floatingElement.rotation.y = t * 0.4;
       }
 
-      // LOD Check performed every frame directly via scene property manipulation (Zero-state overhead)
       if (hasPlayer) {
         const dx = w.position[0] - px;
         const dz = w.position[2] - pz;
@@ -198,9 +209,19 @@ function ProximityAndLODSystem({
       }
     }
 
+    // Hide all weapons that are picked up (shared state already hides via conditional render,
+    // but also scrub the ref just in case it lingers from a stale render cycle)
+    for (const id in weaponRefs.current) {
+      const isGround = groundWeapons.some((w) => w.id === id);
+      if (!isGround) {
+        const g = weaponRefs.current[id];
+        if (g) g.visible = false;
+      }
+    }
+
     const closestDist = Math.sqrt(closestDistSq);
 
-    // 2. POSITION POINT LIGHT AND HTML ANCHOR GRAPHICS
+    // Point light follows closest weapon
     const light = lightRef.current;
     if (light && closestWeapon) {
       if (closestDist < 14) {
@@ -217,9 +238,10 @@ function ProximityAndLODSystem({
       } else {
         light.intensity = 0;
       }
+    } else if (light) {
+      light.intensity = 0;
     }
 
-    // Process UI prompts matrix adjustments synchronously
     const currentNearbyId =
       closestWeapon && closestDist < PICKUP_DISTANCE ? closestWeapon.id : null;
     if (currentNearbyId !== nearbyIdRef.current) {
@@ -239,12 +261,14 @@ function ProximityAndLODSystem({
 
   return (
     <group>
-      {weapons.map((w) => (
+      {/* Only render meshes for ground weapons */}
+      {groundWeapons.map((w) => (
         <group
           key={w.id}
           position={w.position}
           ref={(el) => {
             if (el) weaponRefs.current[w.id] = el;
+            else delete weaponRefs.current[w.id];
           }}
         >
           <group scale={GUN_SCALES[w.type]} position={GUN_OFFSETS[w.type]}>
@@ -262,36 +286,91 @@ function ProximityAndLODSystem({
 }
 
 // ─────────────────────────────────────────────
-// Master Container Component
+// Master Container
 // ─────────────────────────────────────────────
-
 interface WeaponSpawnerProps {
   active: boolean;
 }
 
 export default function WeaponSpawner({ active }: WeaponSpawnerProps) {
-  const [weapons] = useState<SpawnedWeapon[]>(generateWeapons);
-  const [aliveIds, setAliveIds] = useState<Set<string>>(
-    () => new Set(weapons.map((w) => w.id)),
+  // ── Shared room state — single source of truth for ALL clients ──
+  const [worldWeapons, setWorldWeapons] = useMultiplayerState<WorldWeapon[]>(
+    "worldWeapons",
+    [],
   );
-  const [activePromptId, setActivePromptId] = useState<string | null>(null);
 
-  const aliveSetRef = useRef<Set<string>>(aliveIds);
+  const [activePromptId, setActivePromptId] = useState<string | null>(null);
   const lightRef = useRef<THREE.PointLight>(null);
   const htmlGroupRef = useRef<THREE.Group>(null);
+  const initializedRef = useRef(false);
+  const player = myPlayer();
 
-  const handlePickup = useCallback((id: string) => {
-    const nextSet = new Set(aliveSetRef.current);
-    nextSet.delete(id);
-    aliveSetRef.current = nextSet;
-    setAliveIds(nextSet);
-    setActivePromptId((prev) => (prev === id ? null : prev));
-  }, []);
+  // ── Host initializes the shared weapon layout once ──
+  useEffect(() => {
+    if (!active) return;
+    if (initializedRef.current) return;
+    if (!isHost()) return;
+    if (worldWeapons.length > 0) return; // already initialized by a previous host
+
+    initializedRef.current = true;
+    setWorldWeapons(generateWorldWeapons());
+  }, [active, worldWeapons.length, setWorldWeapons]);
+
+  // ── Pickup handler — atomic swap via shared state ──
+  const handlePickup = useCallback(
+    (worldWeaponId: string) => {
+      if (!player) return;
+
+      const target = worldWeapons.find((w) => w.id === worldWeaponId);
+      if (!target || target.pickedUpBy !== null) return; // already taken (race guard)
+
+      const currentWeapon = player.getState("weapon") as WeaponType | null;
+      const playerPosition = player.getState("position") as
+        | [number, number, number]
+        | null;
+
+      // Mark picked-up weapon as held by this player
+      let next: WorldWeapon[] = worldWeapons.map((w) =>
+        w.id === worldWeaponId ? { ...w, pickedUpBy: player.id } : w,
+      );
+
+      // If player already has a weapon, drop it back into the world at their feet
+      if (currentWeapon && playerPosition) {
+        const dropPos: [number, number, number] = [
+          playerPosition[0],
+          getTerrainHeight(playerPosition[0], playerPosition[2]) + 2,
+          playerPosition[2],
+        ];
+        const droppedWeapon: WorldWeapon = {
+          id: `dropped-${player.id}-${Date.now()}`,
+          type: currentWeapon,
+          position: dropPos,
+          phase: Math.random() * Math.PI * 2,
+          pickedUpBy: null,
+        };
+        next = [...next, droppedWeapon];
+      }
+
+      // Broadcast new world state to all clients (reliable = true so it doesn't drop)
+      setWorldWeapons(next, true);
+      // Equip the new weapon on this player's state
+      player.setState("weapon", target.type);
+
+      setActivePromptId((prev) => (prev === worldWeaponId ? null : prev));
+    },
+    [player, worldWeapons, setWorldWeapons],
+  );
+
+  // Ground weapons = all weapons not currently held by anyone
+  const groundWeapons = useMemo(
+    () => worldWeapons.filter((w) => w.pickedUpBy === null),
+    [worldWeapons],
+  );
 
   const activeWeaponData = useMemo(() => {
     if (!activePromptId) return null;
-    return weapons.find((w) => w.id === activePromptId) || null;
-  }, [activePromptId, weapons]);
+    return groundWeapons.find((w) => w.id === activePromptId) || null;
+  }, [activePromptId, groundWeapons]);
 
   if (!active) return null;
 
@@ -299,32 +378,27 @@ export default function WeaponSpawner({ active }: WeaponSpawnerProps) {
     <>
       <pointLight ref={lightRef} distance={10} intensity={0} />
 
-      {/* 1. INSTANCED SINGLE RIGID BODY SYSTEM WITH COMPOUND COLLIDERS 
-          Reduces physics mesh validation overhead down to a single entity hook */}
+      {/* Physics colliders only for ground weapons */}
       <RigidBody type="fixed" colliders={false}>
-        {weapons.map((w) => {
-          if (!aliveIds.has(w.id)) return null;
-          return (
-            <CuboidCollider
-              key={`col-${w.id}`}
-              position={w.position}
-              args={[1, 1, 1]}
-            />
-          );
-        })}
+        {groundWeapons.map((w) => (
+          <CuboidCollider
+            key={`col-${w.id}`}
+            position={w.position}
+            args={[1, 1, 1]}
+          />
+        ))}
       </RigidBody>
 
-      {/* Combined System managing LOD and positions simultaneously */}
+      {/* LOD + proximity system reads live shared state */}
       <ProximityAndLODSystem
-        weapons={weapons}
-        aliveSet={aliveSetRef}
+        weapons={worldWeapons}
         lightRef={lightRef}
         htmlGroupRef={htmlGroupRef}
         setActivePromptId={setActivePromptId}
         onPickup={handlePickup}
       />
 
-      {/* TRANSFORM HOISTED GRAPHICS WRAPPER PROMPT */}
+      {/* Pickup prompt HUD */}
       <group ref={htmlGroupRef}>
         {activeWeaponData && (
           <Html

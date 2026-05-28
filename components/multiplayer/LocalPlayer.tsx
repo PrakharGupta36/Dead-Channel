@@ -40,8 +40,8 @@ export default function LocalPlayer() {
   const yaw = useRef(Math.PI);
   const pitch = useRef(0.4);
 
+  // weapon is now set exclusively by WeaponSpawner via shared room state
   const [weapon] = usePlayerState(player, "weapon", null);
-  // Subscribe to customName so the label updates reactively
   const [customName] = usePlayerState(player, "customName", null);
 
   const [color] = useState(
@@ -101,7 +101,6 @@ export default function LocalPlayer() {
     if (!player) return;
     player.setState("health", health);
     player.setState("color", color);
-    // Sync the resolved display name so remote players read it from state
     const displayName = customName ?? player.getProfile().name;
     player.setState("name", displayName);
   }, [player, color, health, customName]);
@@ -168,7 +167,6 @@ export default function LocalPlayer() {
 
   if (!player) return null;
 
-  // Prefer customName, fall back to profile name
   const displayName = customName ?? player.getProfile().name ?? "Player";
 
   return (
