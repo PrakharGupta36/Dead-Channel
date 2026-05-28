@@ -7,16 +7,32 @@ import * as THREE from "three";
 
 interface PlayerBodyProps {
   color: string;
-  playerId: string; // Changed from 'name' to 'playerId'
+  playerId: string;
   health: number;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   weapon: any;
   isLocal?: boolean;
   label?: string;
+  /** Local-only: live pitch ref so the weapon arm tilts with vertical aim */
+  aimPitch?: React.RefObject<number>;
+  /** Local-only: whether RMB is held (ADS) */
+  isAiming?: React.RefObject<boolean>;
 }
 
 const PlayerBody = forwardRef<THREE.Group, PlayerBodyProps>(
-  ({ color, playerId, health, weapon, isLocal = false, label }, ref) => {
+  (
+    {
+      color,
+      playerId,
+      health,
+      weapon,
+      isLocal = false,
+      label,
+      aimPitch,
+      isAiming,
+    },
+    ref,
+  ) => {
     const clampedHealth = Math.max(0, Math.min(100, health));
 
     return (
@@ -27,19 +43,22 @@ const PlayerBody = forwardRef<THREE.Group, PlayerBodyProps>(
           <meshStandardMaterial color={color} />
         </mesh>
 
-        {/* PERFORMANCE FIX: Continuously mount the component. 
-            Toggle 3D object visibility instead of creating/destroying nodes. */}
+        {/* Weapon — always mounted, visibility toggled for perf */}
         <group visible={!!weapon}>
-          <EquippedWeapon weapon={weapon || "pistol"} isLocal={isLocal} />
+          <EquippedWeapon
+            weapon={weapon || "pistol"}
+            isLocal={isLocal}
+            aimPitch={aimPitch}
+            isAiming={isAiming}
+          />
         </group>
 
         {/* Overhead nameplate + health bar */}
         <Html position={[0, 2.2, 0]} center distanceFactor={10} occlude>
           <div className="pointer-events-none relative top-8 select-none">
-            {/* Displaying playerId here instead of profile name */}
             <div
-              className="mb-1 text-center text-xs font-mono font-bold drop-shadow break-all max-w-[120px]"
-              style={{ color }}
+              className="mb-1 text-center text-xs font-mono font-bold drop-shadow break-all max-w-[20px] "
+              style={{ color, }}
             >
               {playerId}
               {label && (

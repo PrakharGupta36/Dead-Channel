@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/immutability */
 "use client";
 
 import { Controls } from "@/lib/controls";
@@ -25,6 +26,12 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import PlayerBody from "./shared/PlayerBody";
 
+// ADS (aim down sights) constants
+const FOV_DEFAULT = 45;
+const FOV_ADS = 30;
+const ADS_LERP = 0.12;
+const CAM_DIST_ADS = CAM_DIST * 0.6; // tighter zoom when aiming
+
 export default function LocalPlayer() {
   const player = myPlayer();
   const players = usePlayersList();
@@ -34,15 +41,22 @@ export default function LocalPlayer() {
   const meshGroupRef = useRef<THREE.Group>(null);
   const lastNetSync = useRef(0);
 
-  const { camera } = useThree();
+  const { camera, gl } = useThree();
   const [, getKeys] = useKeyboardControls<Controls>();
 
   const yaw = useRef(Math.PI);
-  const pitch = useRef(0.4);
+  const pitch = useRef(0.3);
+  const isAiming = useRef(false); // RMB held
+  const isShooting = useRef(false); // LMB held
+  const currentFov = useRef(FOV_DEFAULT);
+  const isLocked = useRef(false); // pointer lock active
 
-  // weapon is now set exclusively by WeaponSpawner via shared room state
+  // Expose pitch so PlayerBody can tilt the weapon arm
+  const pitchRef = useRef(0.3);
+
   const [weapon] = usePlayerState(player, "weapon", null);
   const [customName] = usePlayerState(player, "customName", null);
+  const [isFiring, setFiringState] = usePlayerState(player, "firing", false);
 
   const [color] = useState(
     () => COLORS[Math.floor(Math.random() * COLORS.length)],
@@ -52,9 +66,7 @@ export default function LocalPlayer() {
     const me = player?.id;
     const ordered = [...players].sort((a, b) => a.id.localeCompare(b.id));
     const myIndex = me ? ordered.findIndex((p) => p.id === me) : -1;
-
     if (myIndex >= 0) return SPAWN_POSITIONS[myIndex % SPAWN_POSITIONS.length];
-
     const fallback = me
       ? Array.from(me).reduce((sum, ch) => sum + ch.charCodeAt(0), 0)
       : 0;
@@ -63,39 +75,73 @@ export default function LocalPlayer() {
 
   const [health] = useState(100);
 
+  // ── Pointer Lock ───────────────────────────────────────────────
   useEffect(() => {
-    let dragging = false;
+    const canvas = gl.domElement;
 
-    const onDown = (e: MouseEvent) => {
-      if (e.button === 0) dragging = true;
+    const requestLock = () => {
+      canvas.requestPointerLock();
     };
-    const onUp = () => {
-      dragging = false;
+
+    const onLockChange = () => {
+      isLocked.current = document.pointerLockElement === canvas;
     };
-    const onLeave = () => {
-      dragging = false;
-    };
-    const onMove = (e: MouseEvent) => {
-      if (!dragging) return;
-      yaw.current -= e.movementX * 0.005;
+
+    const onMouseMove = (e: MouseEvent) => {
+      if (!isLocked.current) return;
+      yaw.current -= e.movementX * 0.002;
       pitch.current = Math.max(
-        0.2,
-        Math.min(1.2, pitch.current + e.movementY * 0.003),
+        -0.05, // almost straight up
+        Math.min(1.3, pitch.current + e.movementY * 0.002),
       );
+      pitchRef.current = pitch.current;
     };
 
-    window.addEventListener("mousedown", onDown);
-    window.addEventListener("mouseup", onUp);
-    window.addEventListener("mouseleave", onLeave);
-    window.addEventListener("mousemove", onMove);
+    const onMouseDown = (e: MouseEvent) => {
+      if (!isLocked.current) {
+        // First click just captures the pointer
+        requestLock();
+        return;
+      }
+      if (e.button === 2) isAiming.current = true;
+      if (e.button === 0) {
+        isShooting.current = true;
+        // Broadcast a fire event so remotes can react
+        if (weapon) setFiringState(!isFiring);
+      }
+    };
+
+    const onMouseUp = (e: MouseEvent) => {
+      if (e.button === 2) isAiming.current = false;
+      if (e.button === 0) isShooting.current = false;
+    };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      // ESC is handled natively by the browser to release pointer lock
+      // but we still want to let the game know
+      if (e.key === "Escape") isLocked.current = false;
+    };
+
+    canvas.addEventListener("click", requestLock);
+    document.addEventListener("pointerlockchange", onLockChange);
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mousedown", onMouseDown);
+    window.addEventListener("mouseup", onMouseUp);
+    window.addEventListener("keydown", onKeyDown);
+
+    // Prevent right-click context menu inside canvas
+    canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 
     return () => {
-      window.removeEventListener("mousedown", onDown);
-      window.removeEventListener("mouseup", onUp);
-      window.removeEventListener("mouseleave", onLeave);
-      window.removeEventListener("mousemove", onMove);
+      canvas.removeEventListener("click", requestLock);
+      document.removeEventListener("pointerlockchange", onLockChange);
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mousedown", onMouseDown);
+      window.removeEventListener("mouseup", onMouseUp);
+      window.removeEventListener("keydown", onKeyDown);
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gl, weapon, isFiring]);
 
   useEffect(() => {
     if (!player) return;
@@ -132,6 +178,7 @@ export default function LocalPlayer() {
       true,
     );
 
+    // Body faces movement direction
     if (_moveDir.lengthSq() > 0.001 && meshGroupRef.current) {
       meshGroupRef.current.rotation.y = THREE.MathUtils.lerp(
         meshGroupRef.current.rotation.y,
@@ -146,21 +193,38 @@ export default function LocalPlayer() {
     }
 
     const t = rb.translation();
+
+    // ── Camera ──────────────────────────────────────────────────
+    const targetDist = isAiming.current ? CAM_DIST_ADS : CAM_DIST;
+    const targetFov = isAiming.current ? FOV_ADS : FOV_DEFAULT;
+    currentFov.current = THREE.MathUtils.lerp(
+      currentFov.current,
+      targetFov,
+      ADS_LERP,
+    );
+    (camera as THREE.PerspectiveCamera).fov = currentFov.current;
+    (camera as THREE.PerspectiveCamera).updateProjectionMatrix();
+
     _lookAt.lerp(
       new THREE.Vector3(t.x, t.y + CAM_HEIGHT, t.z),
       1 - Math.exp(-12 * delta),
     );
     _camPos.set(
-      t.x - Math.sin(yaw.current) * Math.cos(pitch.current) * CAM_DIST,
-      t.y + Math.sin(pitch.current) * CAM_DIST + CAM_HEIGHT,
-      t.z - Math.cos(yaw.current) * Math.cos(pitch.current) * CAM_DIST,
+      t.x - Math.sin(yaw.current) * Math.cos(pitch.current) * targetDist,
+      t.y + Math.sin(pitch.current) * targetDist + CAM_HEIGHT,
+      t.z - Math.cos(yaw.current) * Math.cos(pitch.current) * targetDist,
     );
-    camera.position.lerp(_camPos, 1 - Math.exp(-8 * delta));
+    camera.position.lerp(_camPos, 1 - Math.exp(-10 * delta));
     camera.lookAt(_lookAt);
 
+    // ── Net sync ────────────────────────────────────────────────
     const now = performance.now();
     if (player && now - lastNetSync.current > NET_SYNC_INTERVAL_MS) {
       player.setState("position", [t.x, t.y, t.z], false);
+      // Sync yaw so remote players see the body facing the right way
+      player.setState("yaw", yaw.current, false);
+      // Sync pitch so remote players see the weapon tilt
+      player.setState("pitch", pitch.current, false);
       lastNetSync.current = now;
     }
   });
@@ -189,6 +253,8 @@ export default function LocalPlayer() {
         weapon={weapon}
         isLocal
         label="(You)"
+        aimPitch={pitchRef}
+        isAiming={isAiming}
       />
     </RigidBody>
   );

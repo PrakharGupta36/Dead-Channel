@@ -104,8 +104,7 @@ export default function StartButton({
       {/* subtle red ambient glow */}
       <div className="absolute inset-0 bg-red-500/3" />
 
-      {/* top metallic shine */}
-      <div className="absolute top-0.5 left-[6%] w-[88%] h-px bg-white/15 blur-[0.5px]" />
+    
 
       {/* content */}
       <div className="relative z-10 flex items-center justify-center gap-2">

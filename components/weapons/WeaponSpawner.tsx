@@ -5,13 +5,14 @@ import { getTerrainHeight } from "@/components/scene/Ground";
 import { WeaponType } from "@/lib/weapons";
 import { Html } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
-import { CuboidCollider, RigidBody } from "@react-three/rapier";
 import { AnimatePresence, motion } from "framer-motion";
 import { isHost, myPlayer, useMultiplayerState } from "playroomkit";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 
-
+// ─────────────────────────────────────────────
+// Constants & Lookups
+// ─────────────────────────────────────────────
 const MAP_LIMIT = 60;
 const MIN_DISTANCE = 14;
 const PICKUP_DISTANCE = 4;
@@ -329,12 +330,15 @@ export default function WeaponSpawner({ active }: WeaponSpawnerProps) {
         | [number, number, number]
         | null;
 
-      // Mark picked-up weapon as held by this player
-      let next: WorldWeapon[] = worldWeapons.map((w) =>
-        w.id === worldWeaponId ? { ...w, pickedUpBy: player.id } : w,
-      );
+      // Release any weapon this player previously held (removes the stale entry),
+      // then mark the new weapon as held
+      let next: WorldWeapon[] = worldWeapons
+        .filter((w) => w.pickedUpBy !== player.id) // drop old held entry
+        .map((w) =>
+          w.id === worldWeaponId ? { ...w, pickedUpBy: player.id } : w,
+        );
 
-      // If player already has a weapon, drop it back into the world at their feet
+      // If player already had a weapon, spawn it back on the ground at their feet
       if (currentWeapon && playerPosition) {
         const dropPos: [number, number, number] = [
           playerPosition[0],
@@ -377,17 +381,7 @@ export default function WeaponSpawner({ active }: WeaponSpawnerProps) {
   return (
     <>
       <pointLight ref={lightRef} distance={10} intensity={0} />
-
-      {/* Physics colliders only for ground weapons */}
-      <RigidBody type="fixed" colliders={false}>
-        {groundWeapons.map((w) => (
-          <CuboidCollider
-            key={`col-${w.id}`}
-            position={w.position}
-            args={[1, 1, 1]}
-          />
-        ))}
-      </RigidBody>
+      {/* No physics colliders on weapons — proximity is handled in useFrame. Colliders block the player capsule. */}
 
       {/* LOD + proximity system reads live shared state */}
       <ProximityAndLODSystem
