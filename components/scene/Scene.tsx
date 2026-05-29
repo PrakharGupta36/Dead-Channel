@@ -12,11 +12,10 @@ import { Fragment, useMemo, useRef } from "react";
 import * as THREE from "three";
 
 import PlayerManager from "@/components/multiplayer/shared/PlayerManager";
-import { useMatchProtection } from "@/hooks/useMatchProtection";
 import PerformanceStats from "../debug/PerformanceStats";
 import ActivityLog from "../game-ui/hud/ActivityLog";
-import WeaponSpawner from "../weapons/WeaponSpawner";
 import ControlsUI from "../game-ui/hud/Controls-UI";
+import WeaponSpawner from "../weapons/WeaponSpawner";
 
 interface SceneProps {
   gameStarted: boolean;
@@ -34,12 +33,12 @@ const KEYBOARD_MAP = [
 export default function Scene({ gameStarted }: SceneProps) {
   const localPlayerRef = useRef<THREE.Group>(null);
 
-  useMatchProtection({
-    enabled: gameStarted,
-    onDisconnect: () => {
-      // Send disconnect event
-    },
-  });
+  // useMatchProtection({
+  //   enabled: gameStarted,
+  //   onDisconnect: () => {
+  //     // Send disconnect event
+  //   },
+  // });
 
   const glOptions = useMemo(
     () => ({
@@ -75,7 +74,7 @@ export default function Scene({ gameStarted }: SceneProps) {
           <Lights />
 
           <Physics gravity={[0, -9.81, 0]} updateLoop="independent">
-            <Ground visibleRadius={50} size={200} playerRef={localPlayerRef} />
+            <Ground visibleRadius={60} size={200} playerRef={localPlayerRef} />
             <BorderWalls />
             <Trees />
 

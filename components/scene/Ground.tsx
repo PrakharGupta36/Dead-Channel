@@ -1,10 +1,11 @@
 "use client";
 
 import { RigidBody } from "@react-three/rapier";
-import { useMemo, useRef } from "react";
+import { useMemo } from "react";
 import * as THREE from "three";
-import Grass, { GrassHandle } from "../models/Grass";
+import { InstancedGrass } from "../models/Grass";
 
+// ── Terrain height function (must match vertex shader!) ──
 export function getTerrainHeight(x: number, z: number): number {
   const gentleRoll = Math.sin(x * 0.02) * Math.cos(z * 0.02) * 0.2;
   const minorBumps = Math.sin(x * 0.15) * Math.sin(z * 0.15) * 0.7;
@@ -21,13 +22,11 @@ interface GroundProps {
 
 export default function Ground({
   size = 200,
-  segments = 64,
+  segments = 128,
   playerRef,
-  visibleRadius = 45.0,
+  visibleRadius = 50.0,
   children,
 }: GroundProps) {
-  const grassRef = useRef<GrassHandle>(null);
-
   const displacedGeometry = useMemo(() => {
     const geometry = new THREE.PlaneGeometry(size, size, segments, segments);
     geometry.rotateX(-Math.PI / 2);
@@ -48,18 +47,15 @@ export default function Ground({
       {/* Terrain */}
       <RigidBody type="fixed" colliders="trimesh">
         <mesh geometry={displacedGeometry} receiveShadow castShadow>
-          <meshToonMaterial color="#16ca6a" />
+          <meshToonMaterial color="#15803d" />
         </mesh>
       </RigidBody>
 
-      <Grass
-        ref={grassRef}
-        width={size}
-        height={size}
-        count={2240000}
+      {/* Procedural grass that follows the player */}
+      <InstancedGrass
         playerRef={playerRef}
-        visibleRadius={visibleRadius}
-        getHeight={getTerrainHeight}
+        visibleRadius={35}
+        instancesPerChunk={1500}
       />
 
       {children}
