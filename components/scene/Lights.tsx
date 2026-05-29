@@ -20,7 +20,7 @@ export default function Environment() {
     // Very cheap subtle motion
     if (sunRef.current) {
       sunRef.current.intensity = 0.72 + Math.sin(t * 0.5) * 0.04;
-      sunRef.current.position.x = 35 + Math.sin(t * 0.15) * 2;
+      sunRef.current.position.x = 35 + Math.sin(t * 0.15) * 10;
     }
   });
 
@@ -28,10 +28,10 @@ export default function Environment() {
     <>
       {/* Atmosphere */}
       <color attach="background" args={["#49545c"]} />
-      <fogExp2 attach="fog" args={["#49545c", 0.028]} />
+      <fogExp2 attach="fog" args={["#49545c", 0.03]} />
 
       {/* Cheap global light */}
-      <ambientLight intensity={0.06} />
+      <ambientLight intensity={0.3} />
 
       {/* Main moon light */}
       <directionalLight
@@ -67,10 +67,10 @@ export default function Environment() {
         />
 
         {/* Film grain */}
-        <Noise opacity={0.03} />
+        <Noise opacity={0.04} />
 
         {/* Horror-style dark edges */}
-        <Vignette eskil={false} offset={0.22} darkness={1.1} />
+        <Vignette eskil={false} offset={0.12} darkness={1.1} />
       </EffectComposer>
     </>
   );

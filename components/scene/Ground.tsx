@@ -6,8 +6,8 @@ import * as THREE from "three";
 import Grass, { GrassHandle } from "../models/Grass";
 
 export function getTerrainHeight(x: number, z: number): number {
-  const gentleRoll = Math.sin(x * 0.02) * Math.cos(z * 0.02) * 1.2;
-  const minorBumps = Math.sin(x * 0.15) * Math.sin(z * 0.15) * 1.3;
+  const gentleRoll = Math.sin(x * 0.02) * Math.cos(z * 0.02) * 0.2;
+  const minorBumps = Math.sin(x * 0.15) * Math.sin(z * 0.15) * 0.7;
   return gentleRoll + minorBumps;
 }
 
@@ -48,11 +48,7 @@ export default function Ground({
       {/* Terrain */}
       <RigidBody type="fixed" colliders="trimesh">
         <mesh geometry={displacedGeometry} receiveShadow castShadow>
-          <meshStandardMaterial
-            color="#20ff30"
-            roughness={0.8}
-            flatShading={false}
-          />
+          <meshToonMaterial color="#16ca6a" />
         </mesh>
       </RigidBody>
 
@@ -60,7 +56,7 @@ export default function Ground({
         ref={grassRef}
         width={size}
         height={size}
-        count={840000}
+        count={2240000}
         playerRef={playerRef}
         visibleRadius={visibleRadius}
         getHeight={getTerrainHeight}

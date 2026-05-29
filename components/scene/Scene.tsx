@@ -1,6 +1,5 @@
 "use client";
 
-import HUD from "@/components/hud/HUD";
 import Trees from "@/components/models/Trees";
 import BorderWalls from "@/components/scene/BorderWalls";
 import Ground from "@/components/scene/Ground";
@@ -9,13 +8,15 @@ import { Controls } from "@/lib/controls";
 import { KeyboardControls, Loader } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
-import { useMemo, useRef } from "react";
+import { Fragment, useMemo, useRef } from "react";
 import * as THREE from "three";
 
 import PlayerManager from "@/components/multiplayer/shared/PlayerManager";
+import { useMatchProtection } from "@/hooks/useMatchProtection";
 import PerformanceStats from "../debug/PerformanceStats";
-import ActivityLog from "../hud/ActivityLog";
+import ActivityLog from "../game-ui/hud/ActivityLog";
 import WeaponSpawner from "../weapons/WeaponSpawner";
+import ControlsUI from "../game-ui/hud/Controls-UI";
 
 interface SceneProps {
   gameStarted: boolean;
@@ -32,6 +33,13 @@ const KEYBOARD_MAP = [
 
 export default function Scene({ gameStarted }: SceneProps) {
   const localPlayerRef = useRef<THREE.Group>(null);
+
+  useMatchProtection({
+    enabled: gameStarted,
+    onDisconnect: () => {
+      // Send disconnect event
+    },
+  });
 
   const glOptions = useMemo(
     () => ({
@@ -55,7 +63,7 @@ export default function Scene({ gameStarted }: SceneProps) {
   );
 
   return (
-    <div className="w-full h-full select-none overflow-hidden contain-strict">
+    <div className="w-full h-full select-none overflow-hidden">
       <KeyboardControls map={KEYBOARD_MAP}>
         <Canvas
           shadows="soft"
@@ -67,7 +75,7 @@ export default function Scene({ gameStarted }: SceneProps) {
           <Lights />
 
           <Physics gravity={[0, -9.81, 0]} updateLoop="independent">
-            <Ground visibleRadius={15} size={200} playerRef={localPlayerRef} />
+            <Ground visibleRadius={50} size={200} playerRef={localPlayerRef} />
             <BorderWalls />
             <Trees />
 
@@ -80,9 +88,13 @@ export default function Scene({ gameStarted }: SceneProps) {
         <Loader />
       </KeyboardControls>
 
-      <ActivityLog />
+      {gameStarted && (
+        <Fragment>
+          <ActivityLog />
+        </Fragment>
+      )}
 
-      {gameStarted && <HUD />}
+      {gameStarted && <ControlsUI />}
     </div>
   );
 }

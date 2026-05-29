@@ -66,7 +66,7 @@ const Grass = forwardRef<GrassHandle, GrassProps>(function Grass(
       offsets[i * 3 + 1] = getHeight(x, z);
       offsets[i * 3 + 2] = z;
 
-      heights[i] = 0.1 + Math.random() * 0.5;
+      heights[i] = 1.5 + Math.random() * 0.5;
       randomSeeds[i] = Math.random();
     }
 
@@ -101,7 +101,7 @@ const Grass = forwardRef<GrassHandle, GrassProps>(function Grass(
       transparent: false,
       depthWrite: true,
     });
-  }, []);
+  }, [visibleRadius]);
 
   const playerWorld = useMemo(() => new THREE.Vector3(), []);
   const playerLocal = useMemo(() => new THREE.Vector3(), []);

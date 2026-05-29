@@ -1,4 +1,3 @@
-// app/page.tsx (or pages/index.tsx)
 "use client";
 
 import CustomLobby from "@/components/game-ui/Lobby/Custom-Lobby";
@@ -12,7 +11,6 @@ export default function Home() {
   const [gameStarted, setGameStarted] = useState(false);
 
   useEffect(() => {
-    // Initialize Playroom once when the app loads
     startPlayroom().then(() => {
       setPlayroomReady(true);
     });
@@ -20,17 +18,14 @@ export default function Home() {
 
   if (!playroomReady) {
     return (
-      <div className="w-screen h-screen flex flex-col items-center justify-center bg-zinc-950 text-red-600 font-mono">
-        <Loader2 className="w-12 h-12 animate-spin mb-4" />
-        <p className="tracking-widest uppercase animate-pulse">
-          Establishing Connection...
-        </p>
+      <div className="flex h-screen w-screen items-center justify-center bg-zinc-950 text-red-600">
+        <Loader2 className="mb-4 h-12 w-12 animate-spin" />
       </div>
     );
   }
 
   return (
-    <main className="relative w-screen h-screen bg-zinc-950">
+    <main className="relative h-screen w-screen overflow-hidden">
       <Scene gameStarted={gameStarted} />
 
       {!gameStarted && <CustomLobby onGameStart={() => setGameStarted(true)} />}
