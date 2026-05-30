@@ -12,6 +12,7 @@ import { Fragment, useMemo, useRef } from "react";
 import * as THREE from "three";
 
 import PlayerManager from "@/components/multiplayer/shared/PlayerManager";
+import { useMatchProtection } from "@/hooks/useMatchProtection";
 import PerformanceStats from "../debug/PerformanceStats";
 import ActivityLog from "../game-ui/hud/ActivityLog";
 import ControlsUI from "../game-ui/hud/Controls-UI";
@@ -55,6 +56,10 @@ export default function Scene({ gameStarted }: SceneProps) {
     [],
   );
 
+  useMatchProtection({
+    enabled: true,
+  });
+
   return (
     <div className="w-full h-full select-none overflow-hidden">
       <KeyboardControls map={KEYBOARD_MAP}>
@@ -62,7 +67,7 @@ export default function Scene({ gameStarted }: SceneProps) {
           shadows="soft"
           gl={glOptions}
           camera={cameraOptions}
-          dpr={[.5, 1]}
+          dpr={[0.5, 1]}
           frameloop="always"
         >
           <Environment />

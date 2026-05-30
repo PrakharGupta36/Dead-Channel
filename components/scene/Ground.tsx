@@ -33,8 +33,7 @@ export default function Ground({
   size = 200,
   segments = 128,
   playerRef,
-  visibleRadius = 58,
-  densityScale = 1.0,
+
   children,
 }: GroundProps) {
   const displacedGeometry = useMemo(() => {
@@ -61,7 +60,7 @@ export default function Ground({
       {/* LOD grass – performance is constant regardless of visibleRadius */}
       <InstancedGrass
         playerRef={playerRef}
-        visibleRadius={30}
+        visibleRadius={90}
         densityScale={3}
       />
 
