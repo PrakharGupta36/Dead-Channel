@@ -17,9 +17,8 @@ export default function Environment() {
   useFrame(({ clock }) => {
     const t = clock.elapsedTime;
 
-    // Very cheap subtle motion
     if (sunRef.current) {
-      sunRef.current.intensity = 0.72 + Math.sin(t * 0.5) * 0.04;
+      sunRef.current.intensity = 0.52 + Math.sin(t * 0.5) * 0.04;
       sunRef.current.position.x = 35 + Math.sin(t * 0.15) * 10;
     }
   });
@@ -30,23 +29,31 @@ export default function Environment() {
       <color attach="background" args={["#49545c"]} />
       <fogExp2 attach="fog" args={["#49545c", 0.03]} />
 
-      {/* Cheap global light */}
-      <ambientLight intensity={0.3} />
+      {/* Ambient environment base light */}
+      <ambientLight intensity={0.25} />
 
+      {/* Main dim dynamic scene light */}
+      <directionalLight
+        ref={sunRef}
+        position={[35, 15, 20]}
+        intensity={0.5}
+        castShadow
+        shadow-mapSize={[1024, 1024]}
+      />
 
-      {/* Lightweight postprocessing */}
+      {/* Secondary ambient fill bouncing off the forcefield perimeter */}
+      <directionalLight position={[0, 5, 0]} intensity={0.15} color="#00aaff" />
+
+      {/* Postprocessing */}
       <EffectComposer multisampling={0}>
-        {/* Tiny cinematic edge distortion */}
         <ChromaticAberration
-          offset={new THREE.Vector2(0.0007, 0.0007)}
+          offset={new THREE.Vector2(0.001, 0.001)} // Slightly boosted to match shader glitch style
           blendFunction={BlendFunction.NORMAL}
         />
 
-        {/* Film grain */}
-        <Noise opacity={0.04} />
+        <Noise opacity={0.035} blendFunction={BlendFunction.OVERLAY} />
 
-        {/* Horror-style dark edges */}
-        <Vignette eskil={false} offset={0.12} darkness={1.1} />
+        <Vignette eskil={false} offset={0.15} darkness={0.95} />
       </EffectComposer>
     </>
   );

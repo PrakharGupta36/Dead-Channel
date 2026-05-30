@@ -13,7 +13,7 @@ import * as THREE from "three";
 // ─────────────────────────────────────────────
 // Constants & Lookups
 // ─────────────────────────────────────────────
-const MAP_LIMIT = 90;
+const MAP_LIMIT = 40;
 const MIN_DISTANCE = 14;
 const PICKUP_DISTANCE = 4;
 const LOD_DISTANCE = 28;

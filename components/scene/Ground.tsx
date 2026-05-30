@@ -1,11 +1,11 @@
 "use client";
 
-import { RigidBody } from "@react-three/rapier";
+import { useFrame } from "@react-three/fiber";
+import { CuboidCollider, RigidBody } from "@react-three/rapier";
 import { memo, useMemo } from "react";
 import * as THREE from "three";
 import { InstancedGrass } from "../models/Grass";
 
-// 1. Memoized high-frequency math operation
 export function getTerrainHeight(x: number, z: number): number {
   return (
     Math.sin(x * 0.02) * Math.cos(z * 0.02) * 0.2 +
@@ -22,7 +22,6 @@ interface GroundProps {
   children?: React.RefObject<React.ReactNode>;
 }
 
-// 2. Wrap the component in React.memo to avoid re-renders when the player moves
 const Ground = memo(function Ground({
   size = 200,
   segments = 64,
@@ -36,7 +35,6 @@ const Ground = memo(function Ground({
     const pos = geometry.attributes.position;
     const count = pos.count;
 
-    // Highly cached lookup loop loop
     for (let i = 0; i < count; i++) {
       pos.setY(i, getTerrainHeight(pos.getX(i), pos.getZ(i)));
     }
@@ -45,18 +43,31 @@ const Ground = memo(function Ground({
     return geometry;
   }, [size, segments]);
 
+  // Safe fallback: If a catastrophic lag spike occurs, catch the player and teleport them back up
+  useFrame(() => {
+    if (playerRef?.current) {
+      if (playerRef.current.position.y < -15) {
+        // Find center terrain height or hardcode an explicit spawn coordinate
+        const spawnY = getTerrainHeight(0, 0) + 2;
+
+        // If checking a Rapier controller/rigid-body api object directly:
+        // e.g., rigidBodyRef.current.setTranslation({ x: 0, y: spawnY, z: 0 })
+        playerRef.current.position.set(0, spawnY, 0);
+      }
+    }
+  });
+
   return (
     <>
- 
-      <RigidBody type="fixed" colliders="trimesh">
-        <mesh
-          geometry={displacedGeometry}
-          receiveShadow={false}
-          castShadow={false}
-          
-        >
+      <RigidBody type="fixed" colliders={false}>
+        <mesh geometry={displacedGeometry}>
           <meshBasicMaterial color="#92745B" />
         </mesh>
+
+        <CuboidCollider
+          args={[size / 2, 0.5, size / 2]}
+          position={[0, -0.4, 0]} 
+        />
       </RigidBody>
 
       <InstancedGrass

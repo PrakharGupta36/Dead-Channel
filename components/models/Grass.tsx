@@ -28,7 +28,7 @@ export const InstancedGrass: FC<GrassFieldProps> = ({
 
   // Target 200,000 perfectly balanced into a square root layout
   const density = useMemo(() => {
-    const baseCount = 5000; // 450 * 450 grid matrix mapping
+    const baseCount = 16000; // 450 * 450 grid matrix mapping
     const side = Math.round(Math.sqrt(baseCount * densityScale));
     return side * side;
   }, [densityScale]);

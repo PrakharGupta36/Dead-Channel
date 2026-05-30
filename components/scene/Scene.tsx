@@ -1,20 +1,20 @@
 "use client";
 
-import { useMemo, useRef, memo, Suspense } from "react";
-import * as THREE from "three";
+import { KeyboardControls, Loader } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
-import { KeyboardControls, Loader } from "@react-three/drei";
+import { memo, Suspense, useMemo, useRef } from "react";
+import * as THREE from "three";
 
 import Trees from "@/components/models/Trees";
-import BorderWalls from "@/components/scene/BorderWalls";
+import PlayerManager from "@/components/multiplayer/shared/PlayerManager";
+import BorderWalls from "@/components/scene/Border-Walls";
 import Environment from "@/components/scene/Environment";
 import Ground from "@/components/scene/Ground";
-import PlayerManager from "@/components/multiplayer/shared/PlayerManager";
 import WeaponSpawner from "@/components/weapons/WeaponSpawner";
 
-import { Controls } from "@/lib/controls";
 import { useMatchProtection } from "@/hooks/useMatchProtection";
+import { Controls } from "@/lib/controls";
 import PerformanceStats from "../debug/PerformanceStats";
 import ActivityLog from "../game-ui/hud/ActivityLog";
 import ControlsUI from "../game-ui/hud/Controls-UI";
@@ -89,17 +89,12 @@ export default function Scene({ gameStarted }: SceneProps) {
             <Environment />
 
             {/* 7. Optimizing Rapier step timing */}
-            <Physics
-              gravity={[0, -9.81, 0]}
-              updateLoop="independent"
-              timeStep="vary" 
-            >
+            <Physics gravity={[0, -9.81, 0]} updateLoop="independent">
               <Ground
                 visibleRadius={45}
                 size={150}
                 playerRef={localPlayerRef}
-              />{" "}
-              {/* Reduced radiuses for performance */}
+              />
               <BorderWalls />
               <Trees />
               <PlayerManager active={gameStarted} />

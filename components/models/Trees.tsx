@@ -69,8 +69,8 @@ function createRandom(seed: number) {
 // Main Vegetation Component
 // ─────────────────────────────────────────────
 export default function Trees({
-  count = 30,
-  mapSize = 120,
+  count = 50,
+  mapSize = 200,
   seed = 777,
   ...props
 }: SpawnerProps) {
