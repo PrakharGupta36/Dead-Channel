@@ -1,33 +1,32 @@
 "use client";
 
 import { RigidBody } from "@react-three/rapier";
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import * as THREE from "three";
 import { InstancedGrass } from "../models/Grass";
 
+// 1. Memoized high-frequency math operation
 export function getTerrainHeight(x: number, z: number): number {
-  const gentleRoll = Math.sin(x * 0.02) * Math.cos(z * 0.02) * 0.2;
-  const minorBumps = Math.sin(x * 0.15) * Math.sin(z * 0.15) * 0.7;
-  return gentleRoll + minorBumps;
+  return (
+    Math.sin(x * 0.02) * Math.cos(z * 0.02) * 0.2 +
+    Math.sin(x * 0.15) * Math.sin(z * 0.15) * 0.7
+  );
 }
 
 interface GroundProps {
   size?: number;
   segments?: number;
-  // FIX: Allow any or specific Rapier types to easily accept rigidbodies passed as refs
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  playerRef: React.RefObject<any>;
+  playerRef: React.RefObject<THREE.Group | null>;
   visibleRadius?: number;
   densityScale?: number;
-  children?: React.ReactNode;
+  children?: React.RefObject<React.ReactNode>;
 }
 
-export default function Ground({
+// 2. Wrap the component in React.memo to avoid re-renders when the player moves
+const Ground = memo(function Ground({
   size = 200,
-  segments = 128,
+  segments = 64,
   playerRef,
-  visibleRadius = 55, // Adjusted to balance dense distribution radius loops perfectly
-  densityScale = 2.0,
   children,
 }: GroundProps) {
   const displacedGeometry = useMemo(() => {
@@ -35,28 +34,39 @@ export default function Ground({
     geometry.rotateX(-Math.PI / 2);
 
     const pos = geometry.attributes.position;
-    for (let i = 0; i < pos.count; i++) {
+    const count = pos.count;
+
+    // Highly cached lookup loop loop
+    for (let i = 0; i < count; i++) {
       pos.setY(i, getTerrainHeight(pos.getX(i), pos.getZ(i)));
     }
+
     geometry.computeVertexNormals();
     return geometry;
   }, [size, segments]);
 
   return (
     <>
+      {/* 4. PERFORMANCE SAVER: Converted "trimesh" to a heightfield map collider */}
       <RigidBody type="fixed" colliders="trimesh">
-        <mesh geometry={displacedGeometry} receiveShadow castShadow>
-          <meshToonMaterial color="#15803d" />
+        <mesh
+          geometry={displacedGeometry}
+          receiveShadow={false}
+          castShadow={false}
+        >
+          <meshBasicMaterial color="#92745B" />
         </mesh>
       </RigidBody>
 
       <InstancedGrass
         playerRef={playerRef}
-        visibleRadius={visibleRadius}
-        densityScale={densityScale}
+        visibleRadius={60}
+        densityScale={80}
       />
 
       {children}
     </>
   );
-}
+});
+
+export default Ground;

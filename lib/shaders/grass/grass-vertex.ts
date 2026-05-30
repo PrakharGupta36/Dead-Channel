@@ -1,77 +1,73 @@
 export const grassVertexShader = /* glsl */ `
-precision mediump float;
+uniform float uTime;
+uniform vec3 uPlayerPos;
+uniform float uRadius;
 
-uniform vec3 uBaseColor;
-uniform vec3 uTipColor;
-uniform vec3 uFogColor;
+attribute vec2 aInstanceOffset;
 
 varying float vElevation;
-varying float vSideGradient;
-varying vec3  vNormal;
-varying vec3  vFakeNormal;
-varying vec3  vPosition;
-varying float vColorNoise;
+varying vec3 vWorldPos;
 varying float vAlpha;
-varying vec3  vViewDir;
+varying float vWind;
 
-float celShade(float value, float bands) {
-    return floor(value * bands) / bands;
+float hash(vec2 p) {
+    return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+}
+
+// MATCHES GROUND.TSX EXACTLY: Combined gentle roll and minor bumps
+float getTerrainHeight(float x, float z) {
+    float gentleRoll = sin(x * 0.02) * cos(z * 0.02) * 0.2;
+    float minorBumps = sin(x * 0.15) * sin(z * 0.15) * 0.7;
+    return gentleRoll + minorBumps;
 }
 
 void main() {
-    if (vAlpha < 0.02) discard;
+    vElevation = position.y * 2.0; 
+    float range = uRadius * 2.0;
 
-    vec3 N = gl_FrontFacing ? vFakeNormal : -vFakeNormal;
+    // 1. Precise Grid Snapping 
+    vec3 worldAnchor = vec3(0.0);
+    worldAnchor.x = floor((uPlayerPos.x - aInstanceOffset.x) / range + 0.5) * range + aInstanceOffset.x;
+    worldAnchor.z = floor((uPlayerPos.z - aInstanceOffset.y) / range + 0.5) * range + aInstanceOffset.y;
+    
+    // Calculate precise terrain height, adding a microscopic offset (+ 0.01) 
+    // to keep grass bases beautifully flush but clear of Z-fighting.
+    worldAnchor.y = getTerrainHeight(worldAnchor.x, worldAnchor.z) + 0.01;
 
-    float t = clamp(vElevation, 0.0, 1.0);
+    float h = hash(worldAnchor.xz);
 
-    vec3 colorSoil = vec3(0.04, 0.14, 0.04);   
-    vec3 colorMid  = uBaseColor;                 
-    vec3 colorTip  = uTipColor;                  
+    // 2. High Performance Sines/Cosines Rotation Bypass
+    vec3 localPos = position;
+    localPos.xyz *= vec3(0.9 + h * 0.3, 0.8 + h * 0.4, 0.9 + h * 0.3);
 
-    vec3 grassColor;
-    if (t < 0.45) {
-        grassColor = mix(colorSoil, colorMid, t / 0.45);
-    } else {
-        grassColor = mix(colorMid, colorTip, (t - 0.45) / 0.55);
+    float angle = h * 6.283185;
+    float sa = sin(angle);
+    float ca = cos(angle);
+    
+    float rx = localPos.x * ca - localPos.z * sa;
+    float rz = localPos.x * sa + localPos.z * ca;
+    localPos.x = rx;
+    localPos.z = rz;
+
+    // 3. Fast Horizon Culling
+    float dist = distance(worldAnchor.xz, uPlayerPos.xz);
+    vAlpha = 1.0 - smoothstep(uRadius * 0.75, uRadius, dist);
+
+    if (vAlpha <= 0.0) {
+        gl_Position = vec4(0.0);
+        return;
     }
 
-    grassColor += vec3(vColorNoise * 1.2, vColorNoise * 0.6, vColorNoise * 0.1);
+    // 4. Combined Wave Synthesis 
+    float windCoord = (worldAnchor.x + worldAnchor.z) * 0.05 + uTime * 1.1;
+    vWind = sin(windCoord) * 0.5 + 0.5;
 
-    vec3  sunDir       = normalize(vec3(0.6, 1.0, 0.4));
-    vec3  sunColor     = vec3(1.0, 0.95, 0.75);
-    float NdotL_raw    = dot(N, sunDir);
-    float NdotL_wrap   = NdotL_raw * 0.5 + 0.5;  
-    float NdotL_cel    = celShade(NdotL_wrap, 3.0) * 0.85 + 0.15;
-    vec3  sunLight     = sunColor * NdotL_cel * 0.9;
+    float bend = vElevation * vElevation;
+    localPos.x += vWind * 0.35 * bend;
+    localPos.z += vWind * 0.15 * bend;
+    localPos.y -= vWind * 0.12 * bend;
 
-    vec3 skyColor  = vec3(0.3, 0.55, 0.35);
-    vec3 skyLight  = skyColor * (0.35 + 0.2 * clamp(N.y, 0.0, 1.0));
-
-    vec3 groundColor  = vec3(0.05, 0.18, 0.04);
-    vec3 groundBounce = groundColor * (0.15 * clamp(-N.y + 0.5, 0.0, 1.0));
-
-    float rimDot   = 1.0 - max(0.0, dot(N, vViewDir));
-    float rimMask  = pow(rimDot, 3.5) * t * t;          
-    vec3  rimLight = colorTip * rimMask * 0.45;
-
-    float sss      = pow(max(0.0, dot(-sunDir, vViewDir)), 4.0);
-    sss           *= (1.0 - t) * 0.0 + t * 0.3;        
-    vec3  sssLight = vec3(0.6, 1.0, 0.3) * sss * 0.35;
-
-    vec3 lighting  = sunLight + skyLight + groundBounce + rimLight + sssLight;
-    vec3 finalColor = grassColor * lighting;
-
-    float baseDarken = 1.0 - (1.0 - smoothstep(0.0, 0.25, t)) * 0.55;
-    finalColor *= baseDarken;
-
-    float dist      = length(cameraPosition - vPosition);
-    float fogFactor = smoothstep(38.0, 55.0, dist);
-    vec3  fogCol    = uFogColor * 0.8 + vec3(0.1, 0.22, 0.1);
-    finalColor      = mix(finalColor, fogCol, fogFactor * 0.75);
-
-    finalColor = pow(finalColor, vec3(0.88)); 
-
-    gl_FragColor = vec4(finalColor, vAlpha);
+    vWorldPos = worldAnchor + localPos;
+    gl_Position = projectionMatrix * viewMatrix * vec4(vWorldPos, 1.0);
 }
 `;
