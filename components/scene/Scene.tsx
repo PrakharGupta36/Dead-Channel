@@ -2,8 +2,8 @@
 
 import Trees from "@/components/models/Trees";
 import BorderWalls from "@/components/scene/BorderWalls";
+import Environment from "@/components/scene/Environment";
 import Ground from "@/components/scene/Ground";
-import Lights from "@/components/scene/Lights";
 import { Controls } from "@/lib/controls";
 import { KeyboardControls, Loader } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
@@ -33,18 +33,12 @@ const KEYBOARD_MAP = [
 export default function Scene({ gameStarted }: SceneProps) {
   const localPlayerRef = useRef<THREE.Group>(null);
 
-  // useMatchProtection({
-  //   enabled: gameStarted,
-  //   onDisconnect: () => {
-  //     // Send disconnect event
-  //   },
-  // });
-
   const glOptions = useMemo(
     () => ({
-      antialias: false,
+      antialias: false, // SMAA handles AA
       powerPreference: "high-performance" as const,
-      toneMapping: THREE.ACESFilmicToneMapping,
+      toneMapping: THREE.ACESFilmicToneMapping, // done on renderer, NOT in composer
+      toneMappingExposure: 1.05,
       outputColorSpace: THREE.SRGBColorSpace,
       preserveDrawingBuffer: false,
     }),
@@ -53,7 +47,7 @@ export default function Scene({ gameStarted }: SceneProps) {
 
   const cameraOptions = useMemo(
     () => ({
-      position: [0, 30, 60] as [number, number, number],
+      position: [0, 30, 90] as [number, number, number],
       fov: 65,
       near: 0.1,
       far: 300,
@@ -68,16 +62,15 @@ export default function Scene({ gameStarted }: SceneProps) {
           shadows="soft"
           gl={glOptions}
           camera={cameraOptions}
-          dpr={[2, 1]}
+          dpr={[.5, 1]}
           frameloop="always"
         >
-          <Lights />
+          <Environment />
 
           <Physics gravity={[0, -9.81, 0]} updateLoop="independent">
             <Ground visibleRadius={60} size={200} playerRef={localPlayerRef} />
             <BorderWalls />
             <Trees />
-
             <PlayerManager active={gameStarted} />
             <WeaponSpawner active={gameStarted} />
           </Physics>
