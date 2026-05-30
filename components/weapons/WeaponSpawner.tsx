@@ -13,7 +13,7 @@ import * as THREE from "three";
 // ─────────────────────────────────────────────
 // Constants & Lookups
 // ─────────────────────────────────────────────
-const MAP_LIMIT = 60;
+const MAP_LIMIT = 90;
 const MIN_DISTANCE = 14;
 const PICKUP_DISTANCE = 4;
 const LOD_DISTANCE = 28;
@@ -23,9 +23,9 @@ const FLOAT_AMPLITUDE = 0.18;
 
 // ── Exact weapon pool: 15 pistols, 8 ak47s, 7 smgs ──
 const WEAPON_POOL: WeaponType[] = [
-  ...Array(15).fill("pistol"),
-  ...Array(8).fill("ak47"),
-  ...Array(7).fill("smg"),
+  ...Array(19).fill("pistol"),
+  ...Array(6).fill("ak47"),
+  ...Array(5).fill("smg"),
 ] as WeaponType[];
 
 const GLOW_COLORS: Record<WeaponType, THREE.Color> = {

@@ -11,7 +11,7 @@ interface BorderWallsProps {
 }
 
 export default function BorderWalls({
-  size = 200,
+  size = 150,
   segments = 64,
 }: BorderWallsProps) {
   const cliffGeometry = useMemo(() => {

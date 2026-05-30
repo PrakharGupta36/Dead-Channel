@@ -47,12 +47,13 @@ const Ground = memo(function Ground({
 
   return (
     <>
-      {/* 4. PERFORMANCE SAVER: Converted "trimesh" to a heightfield map collider */}
+ 
       <RigidBody type="fixed" colliders="trimesh">
         <mesh
           geometry={displacedGeometry}
           receiveShadow={false}
           castShadow={false}
+          
         >
           <meshBasicMaterial color="#92745B" />
         </mesh>

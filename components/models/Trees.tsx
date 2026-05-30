@@ -70,7 +70,7 @@ function createRandom(seed: number) {
 // ─────────────────────────────────────────────
 export default function Trees({
   count = 30,
-  mapSize = 180,
+  mapSize = 120,
   seed = 777,
   ...props
 }: SpawnerProps) {
