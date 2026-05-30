@@ -5,7 +5,6 @@ import { useMemo } from "react";
 import * as THREE from "three";
 import { InstancedGrass } from "../models/Grass";
 
-// ── Terrain height – must match the vertex shader exactly ───────────────────
 export function getTerrainHeight(x: number, z: number): number {
   const gentleRoll = Math.sin(x * 0.02) * Math.cos(z * 0.02) * 0.2;
   const minorBumps = Math.sin(x * 0.15) * Math.sin(z * 0.15) * 0.7;
@@ -15,15 +14,9 @@ export function getTerrainHeight(x: number, z: number): number {
 interface GroundProps {
   size?: number;
   segments?: number;
-  playerRef: React.RefObject<THREE.Object3D | null>;
-  /**
-   * visibleRadius and densityScale are passed through to the grass component
-   * but do NOT linearly increase GPU cost thanks to the 3-LOD architecture:
-   *
-   *   visibleRadius – extends the outer LOD ring; inner LODs are unaffected.
-   *   densityScale  – scales blades/chunk on all LODs uniformly (default 1.0).
-   *                   Set to 2.0 for a lush field, 0.5 for a sparse meadow.
-   */
+  // FIX: Allow any or specific Rapier types to easily accept rigidbodies passed as refs
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  playerRef: React.RefObject<any>;
   visibleRadius?: number;
   densityScale?: number;
   children?: React.ReactNode;
@@ -33,7 +26,8 @@ export default function Ground({
   size = 200,
   segments = 128,
   playerRef,
-
+  visibleRadius = 55, // Adjusted to balance dense distribution radius loops perfectly
+  densityScale = 2.0,
   children,
 }: GroundProps) {
   const displacedGeometry = useMemo(() => {
@@ -50,18 +44,16 @@ export default function Ground({
 
   return (
     <>
-      {/* Terrain mesh with physics */}
       <RigidBody type="fixed" colliders="trimesh">
         <mesh geometry={displacedGeometry} receiveShadow castShadow>
           <meshToonMaterial color="#15803d" />
         </mesh>
       </RigidBody>
 
-      {/* LOD grass – performance is constant regardless of visibleRadius */}
       <InstancedGrass
         playerRef={playerRef}
-        visibleRadius={90}
-        densityScale={3}
+        visibleRadius={visibleRadius}
+        densityScale={densityScale}
       />
 
       {children}
