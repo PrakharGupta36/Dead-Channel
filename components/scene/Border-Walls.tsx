@@ -114,7 +114,7 @@ const fragmentShader = `
 `;
 
 export default function BorderWalls({
-  size = 150,
+  size = 180,
   segments = 64,
 }: BorderWallsProps) {
   const shaderRef = useRef<THREE.ShaderMaterial>(null);

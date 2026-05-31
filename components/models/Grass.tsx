@@ -1,156 +1,191 @@
+/* eslint-disable react-hooks/exhaustive-deps */
+/* eslint-disable react-hooks/purity */
 "use client";
 
-import { grassFragmentShader } from "@/lib/shaders/grass/grass-fragment";
-import { grassVertexShader } from "@/lib/shaders/grass/grass-vertex";
+import { useGLTF } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
-import { FC, useMemo, useRef } from "react";
+import { useMemo, useRef } from "react";
 import * as THREE from "three";
+import { getTerrainHeight } from "../scene/Ground";
 
-interface RapierRigidBodyLike {
-  translation: () => { x: number; y: number; z: number };
-  getWorldPosition?: (target: THREE.Vector3) => THREE.Vector3;
-}
+const SIMPLEX_GLSL = /* glsl */ `
+  vec3 mod289v3(vec3 x) { return x - floor(x*(1./289.))*289.; }
+  vec2 mod289v2(vec2 x) { return x - floor(x*(1./289.))*289.; }
+  vec3 permuteV3(vec3 x) { return mod289v3(((x*34.)+1.)*x); }
+  float simplex2d(vec2 v) {
+    const vec4 C = vec4(0.211324865405187,0.366025403784439,-0.577350269189626,0.024390243902439);
+    vec2 i  = floor(v + dot(v,C.yy));
+    vec2 x0 = v - i + dot(i,C.xx);
+    vec2 i1 = (x0.x>x0.y) ? vec2(1.,0.) : vec2(0.,1.);
+    vec4 x12 = x0.xyxy + C.xxzz;
+    x12.xy -= i1;
+    i = mod289v2(i);
+    vec3 p = permuteV3(permuteV3(i.y+vec3(0.,i1.y,1.))+i.x+vec3(0.,i1.x,1.));
+    vec3 m = max(.5-vec3(dot(x0,x0),dot(x12.xy,x12.xy),dot(x12.zw,x12.zw)),0.);
+    m=m*m; m=m*m;
+    vec3 x = 2.*fract(p*C.www)-1.;
+    vec3 h = abs(x)-.5;
+    vec3 ox = floor(x+.5);
+    vec3 a0 = x-ox;
+    m *= 1.79284291400159-.85373472095314*(a0*a0+h*h);
+    vec3 g;
+    g.x  = a0.x *x0.x  + h.x *x0.y;
+    g.yz = a0.yz*x12.xz + h.yz*x12.yw;
+    return 130.*dot(m,g);
+  }
+`;
 
-interface GrassFieldProps {
-  playerRef: React.RefObject<THREE.Object3D | RapierRigidBodyLike | null>;
-  visibleRadius?: number;
-  densityScale?: number;
-}
+// Single shared uniform definition object allocation outside the render cycle loop
+const globalWindUniforms = {
+  uTime: { value: 0 },
+  uWindStrength: { value: new THREE.Vector3(0.3, 0, 0.3) },
+  uWindFrequency: { value: 1.0 },
+  uWindScale: { value: 400.0 },
+};
 
-export const InstancedGrass: FC<GrassFieldProps> = ({
-  playerRef,
-  visibleRadius = 55, // Expanded slightly to handle the 200k distribution range beautifully
-  densityScale = 1.0,
-}) => {
-  const meshRef = useRef<THREE.InstancedMesh>(null);
-  const matRef = useRef<THREE.ShaderMaterial>(null);
-  const playerPos = useRef(new THREE.Vector3());
+function buildWindMaterial(
+  base: THREE.MeshBasicMaterial,
+): THREE.MeshBasicMaterial {
+  base.onBeforeCompile = (shader) => {
+    shader.uniforms.uTime = globalWindUniforms.uTime;
+    shader.uniforms.uWindStrength = globalWindUniforms.uWindStrength;
+    shader.uniforms.uWindFrequency = globalWindUniforms.uWindFrequency;
+    shader.uniforms.uWindScale = globalWindUniforms.uWindScale;
 
-  // Target 200,000 perfectly balanced into a square root layout
-  const density = useMemo(() => {
-    const baseCount = 16000; // 450 * 450 grid matrix mapping
-    const side = Math.round(Math.sqrt(baseCount * densityScale));
-    return side * side;
-  }, [densityScale]);
+    shader.vertexShader =
+      `
+      uniform float uTime;
+      uniform vec3 uWindStrength;
+      uniform float uWindFrequency;
+      uniform float uWindScale;
+    \n` + shader.vertexShader;
 
-  // ULTRA-LIGHTWEIGHT GEOMETRY: 3 Triangles (4 Vertices instead of 5)
-  // Reduces overall triangle processing count down to 600,000 across the environment pool
-  const geometry = useMemo(() => {
-    const geo = new THREE.BufferGeometry();
-    const hw = 0.1; // Leaner blade width for denser packing
-    const h = 0.5;
-
-    const vertices = new Float32Array([
-      -hw,
-      0,
-      0, // 0: Base Left
-      hw,
-      0,
-      0, // 1: Base Right
-      -hw * 0.5,
-      h * 0.5,
-      0.02, // 2: Mid Left (Slight offset for profile depth)
-      0,
-      h,
-      0.1, // 3: Tip (Single point merge skips 1 vertex per blade entirely)
-    ]);
-
-    const indices = [
-      0,
-      1,
-      2, // Triangle 1 (Lower Left half)
-      1,
-      3,
-      2, // Triangle 2 (Lower Right half extending up)
-      2,
-      3,
-      1, // Back-closing alternate wedge (No degenerate indexing overhead)
-    ];
-
-    geo.setAttribute("position", new THREE.BufferAttribute(vertices, 3));
-    geo.setIndex(indices);
-
-    // We omit normal generation arrays because we manually mathematically calculate
-    // lighting trajectories per instance directly within the GLSL runtime.
-    return geo;
-  }, []);
-
-  const material = useMemo(() => {
-    const instanceOffsets = new Float32Array(density * 2);
-    const side = Math.round(Math.sqrt(density));
-
-    for (let i = 0; i < density; i++) {
-      const cx = i % side;
-      const cz = Math.floor(i / side);
-      // Normalized safe-space random jitter pre-calculated on initialization to save ALU loops
-      const jitterX = (Math.sin(i * 0.123) * 0.5 + 0.5) * 0.4;
-      const jitterZ = (Math.cos(i * 0.456) * 0.5 + 0.5) * 0.4;
-
-      instanceOffsets[i * 2] =
-        (cx / (side - 1) - 0.5 + jitterX) * visibleRadius * 2.0;
-      instanceOffsets[i * 2 + 1] =
-        (cz / (side - 1) - 0.5 + jitterZ) * visibleRadius * 2.0;
-    }
-
-    geometry.setAttribute(
-      "aInstanceOffset",
-      new THREE.InstancedBufferAttribute(instanceOffsets, 2),
+    shader.vertexShader = shader.vertexShader.replace(
+      `void main() {`,
+      SIMPLEX_GLSL + `\nvoid main() {`,
     );
 
-    return new THREE.ShaderMaterial({
-      uniforms: {
-        uTime: { value: 0 },
-        uPlayerPos: { value: new THREE.Vector3() },
-        uRadius: { value: visibleRadius },
-        uBaseColor: { value: new THREE.Color("#355749") },
-        uMiddleColor: { value: new THREE.Color("#057a26") },
-        uTipColor: { value: new THREE.Color("#d5ff00") },
-        uFogColor: { value: new THREE.Color("#2d542d") },
-      },
-      vertexShader: grassVertexShader,
-      fragmentShader: grassFragmentShader,
-      side: THREE.DoubleSide,
+    // Instanced specific high-speed positional sway mapping code block injection
+    const projectVertex = /* glsl */ `
+      vec4 mvPosition = instanceMatrix * vec4(transformed, 1.0);
+      float windOffset = 6.2831853 * simplex2d((modelMatrix * mvPosition).xz / uWindScale);
+      vec3 windSway = position.y * uWindStrength *
+        sin(uTime * uWindFrequency + windOffset) *
+        cos(uTime * 1.4 * uWindFrequency + windOffset);
+      mvPosition.xyz += windSway;
+      mvPosition = modelViewMatrix * mvPosition;
+      gl_Position = projectionMatrix * mvPosition;
+    `;
+
+    shader.vertexShader = shader.vertexShader.replace(
+      `#include <project_vertex>`,
+      projectVertex,
+    );
+  };
+  return base;
+}
+
+export interface GrassOptions {
+  instanceCount?: number;
+  maxInstanceCount?: number;
+  scale?: number;
+  size?: { x: number; y: number; z: number };
+  sizeVariation?: { x: number; y: number; z: number };
+}
+
+const DEFAULTS: Required<GrassOptions> = {
+  instanceCount: 75000,
+  maxInstanceCount: 90000,
+  scale: 300,
+  size: { x: 0.9, y: 0.8, z: 0.9 },
+  sizeVariation: { x: 0.2, y: 0.3, z: 0.2 },
+};
+
+export function GrassField(props: GrassOptions) {
+  const opts = { ...DEFAULTS, ...props } as Required<GrassOptions>;
+  const { scene: grassScene } = useGLTF("/models/grass.glb");
+  const meshRef = useRef<THREE.InstancedMesh>(null);
+
+  // 1. Visually build the InstancedMesh parameters once via useMemo
+  const grassMesh = useMemo(() => {
+    const sourceMesh = grassScene.children[0] as THREE.Mesh;
+    if (!sourceMesh?.geometry) return null;
+
+    // OPTIMIZATION: Switched Phong to Basic to completely bypass lighting calculation overdraw loops
+    const baseMat = new THREE.MeshBasicMaterial({
+      map: (sourceMesh.material as THREE.MeshBasicMaterial).map,
       transparent: false,
+      alphaTest: 0.6, // Higher cutoff discards fuzzy pixels earlier
       depthWrite: true,
       depthTest: true,
+      side: THREE.DoubleSide,
     });
-  }, [geometry, density, visibleRadius]);
 
-  useFrame(({ clock, camera }) => {
-    const mat = matRef.current;
-    if (!mat) return;
+    const mat = buildWindMaterial(baseMat);
+    const mesh = new THREE.InstancedMesh(
+      sourceMesh.geometry,
+      mat,
+      opts.maxInstanceCount,
+    );
 
-    const currentTarget = playerRef.current;
-    if (currentTarget) {
-      if (
-        "translation" in currentTarget &&
-        typeof currentTarget.translation === "function"
-      ) {
-        const t = (currentTarget as RapierRigidBodyLike).translation();
-        playerPos.current.set(t.x, t.y, t.z);
-      } else if (
-        "getWorldPosition" in currentTarget &&
-        typeof currentTarget.getWorldPosition === "function"
-      ) {
-        currentTarget.getWorldPosition(playerPos.current);
-      } else if ("position" in currentTarget) {
-        playerPos.current.copy((currentTarget as THREE.Object3D).position);
-      }
-    } else {
-      playerPos.current.copy(camera.position);
+    const dummy = new THREE.Object3D();
+    const color = new THREE.Color();
+    let count = 0;
+
+    // Use single float allocations inside loop iterations to prevent GC churn sweeps
+    const halfScale = opts.scale * 0.5;
+
+    for (let i = 0; i < opts.maxInstanceCount; i++) {
+      const px = (Math.random() - 0.5) * opts.scale;
+      const pz = (Math.random() - 0.5) * opts.scale;
+
+      // Fast check out-of-bounds math logic sweep optimization
+      if (Math.abs(px) > halfScale || Math.abs(pz) > halfScale) continue;
+
+      const py = getTerrainHeight(px, pz);
+
+      dummy.position.set(px, py, pz);
+      dummy.rotation.set(0, Math.random() * 6.28318, 0);
+      dummy.scale.set(
+        opts.sizeVariation.x * Math.random() + opts.size.x,
+        opts.sizeVariation.y * Math.random() + opts.size.y,
+        opts.sizeVariation.z * Math.random() + opts.size.z,
+      );
+      dummy.updateMatrix();
+
+      // Variations of lush wilderness greens matching vertex ranges natively
+      color.setRGB(
+        0.18 + Math.random() * 0.08,
+        0.24 + Math.random() * 0.15,
+        0.08,
+      );
+
+      mesh.setMatrixAt(count, dummy.matrix);
+      mesh.setColorAt(count, color);
+      count++;
     }
 
-    mat.uniforms.uTime.value = clock.getElapsedTime();
-    mat.uniforms.uPlayerPos.value.copy(playerPos.current);
+    mesh.count = Math.min(opts.instanceCount, count);
+    mesh.instanceMatrix.needsUpdate = true;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+
+    // Explicitly disable heavy shadow rendering maps for mass instanced micro items
+    mesh.castShadow = false;
+    mesh.receiveShadow = false;
+
+    return mesh;
+  }, [grassScene]);
+
+  // 2. Direct fast tick update thread binding loops
+  useFrame(({ clock }) => {
+    globalWindUniforms.uTime.value = clock.getElapsedTime();
   });
 
-  return (
-    <instancedMesh
-      ref={meshRef}
-      args={[geometry, material, density]}
-      frustumCulled={false} // Retained true infinite tracking simulation behavior
-    >
-      <primitive object={material} ref={matRef} attach="material" />
-    </instancedMesh>
-  );
+  if (!grassMesh) return null;
+
+  return <primitive object={grassMesh} ref={meshRef} />;
+}
+
+GrassField.preload = () => {
+  useGLTF.preload("/models/grass.glb");
 };

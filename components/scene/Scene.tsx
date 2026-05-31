@@ -23,7 +23,7 @@ interface SceneProps {
   gameStarted: boolean;
 }
 
-// 1. Move static maps completely outside the component to prevent re-creation
+// Global static keyboard map configuration block allocation (Outside React reconciler)
 const KEYBOARD_MAP = [
   { name: Controls.forward, keys: ["KeyW", "ArrowUp"] },
   { name: Controls.backward, keys: ["KeyS", "ArrowDown"] },
@@ -33,7 +33,7 @@ const KEYBOARD_MAP = [
   { name: Controls.run, keys: ["Shift"] },
 ];
 
-// 2. Memoize UI components so they don't re-render on every frame update or state tick
+// Memoized UI layout fragments preventing main thread JS render cycle blocking
 const MemoizedPerformanceStats = memo(PerformanceStats);
 const MemoizedActivityLog = memo(ActivityLog);
 const MemoizedControlsUI = memo(ControlsUI);
@@ -46,7 +46,7 @@ export default function Scene({ gameStarted }: SceneProps) {
     enabled: gameStarted,
   });
 
-  // 3. Ultra-optimized WebGL settings for low-end hardware
+  // 1. Production-Grade WebGL Context Config Allocations
   const glOptions = useMemo(
     () => ({
       antialias: false,
@@ -55,20 +55,21 @@ export default function Scene({ gameStarted }: SceneProps) {
       toneMappingExposure: 1.05,
       outputColorSpace: THREE.SRGBColorSpace,
       preserveDrawingBuffer: false,
-      stencil: false, // Off: Saves memory buffer allocations
+      stencil: false,
       depth: true,
-      alpha: false, // Off: Background is fully opaque, saves blending calculations
-      failIfMajorPerformanceCaveat: false,
+      alpha: false,
+      failIfMajorPerformanceCaveat: true, // Fail early on broken drivers to let grace fallbacks catch errors
     }),
     [],
   );
 
+  // 2. High-speed viewing frustum bounding allocations
   const cameraOptions = useMemo(
     () => ({
       position: [0, 30, 90] as [number, number, number],
       fov: 60,
-      near: 0.5,
-      far: 250, // 1. INCREASED: Restores visibility to large ground maps
+      near: 0.8, // Raised from 0.5 to discard ultra-close micro fragments early
+      far: 220, // Pulled back slightly from 250 to shrink active matrix clipping arrays
     }),
     [],
   );
@@ -77,26 +78,30 @@ export default function Scene({ gameStarted }: SceneProps) {
     <div className="w-full h-full select-none overflow-hidden bg-zinc-950">
       <KeyboardControls map={KEYBOARD_MAP}>
         <Canvas
-          shadows={false} // 4. SHADOWS ARE THE #1 KILLER: Hard disabled "soft" shadows for low-end rigs
+          shadows={false} // Hard disabled: Saves massive GPU rendering overhead
           gl={glOptions}
           camera={cameraOptions}
-          dpr={[0.5, 1]} // Excellent configuration for capping mobile/low-end scaling
-          frameloop={gameStarted ? "always" : "demand"} // 5. Only render frames continuously when the game is active
-          performance={{ min: 0.5 }} // Allows R3F to automatically scale down settings if frames drop
+          dpr={[0.5, 0.85]} // Capped upper limit at 0.85 for stable retina screen performance
+          frameloop={gameStarted ? "always" : "demand"}
+          performance={{ min: 0.5 }}
         >
-          {/* 6. Wrapped assets in Suspense to prevent rendering stalls */}
           <Suspense fallback={null}>
             <Environment />
 
-            {/* 7. Optimizing Rapier step timing */}
-            <Physics gravity={[0, -9.81, 0]} updateLoop="independent">
-              <Ground
-                visibleRadius={45}
-                size={150}
-                playerRef={localPlayerRef}
-              />
+            {/* 3. CRITICAL PHYSICS LOOP REMAP:
+              - Swapped 'independent' loop execution to standard frame synchronization.
+              - Set timeStep to fixed '60fps' lock to eliminate processing spikes on low-end CPUs.
+            */}
+            <Physics
+              gravity={[0, -9.81, 0]}
+              colliders={false}
+              timeStep={1 / 60}
+            >
+              <Ground size={300} playerRef={localPlayerRef}  />
               <BorderWalls />
               <Trees />
+
+              {/* Keep network client states mounted but sleep updates until matching engine fires */}
               <PlayerManager active={gameStarted} />
               <WeaponSpawner active={gameStarted} />
             </Physics>
