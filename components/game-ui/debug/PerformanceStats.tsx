@@ -80,7 +80,9 @@ export default function PerformanceStats() {
         z-[9999]
         pointer-events-none
         scale-80
+        
       "
+      
     >
       <Card
         className="

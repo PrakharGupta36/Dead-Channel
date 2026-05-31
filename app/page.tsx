@@ -1,14 +1,17 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
 import CustomLobby from "@/components/game-ui/Lobby/Custom-Lobby";
 import Scene from "@/components/scene/Scene";
+import { Spinner } from "@/components/ui/spinner";
 import { startPlayroom } from "@/lib/playroom";
+import { Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 export default function Home() {
   const [playroomReady, setPlayroomReady] = useState(false);
   const [gameStarted, setGameStarted] = useState(false);
-  const [progress, setProgress] = useState(0);
+  const [, setProgress] = useState(0);
 
   // Keep track of timeout/interval IDs to prevent memory leaks on unmount
   const timersRef = useRef<{
@@ -53,27 +56,9 @@ export default function Home() {
 
   // Display Loading Screen
   if (!playroomReady) {
-    // Clamped progress value for styling and text
-    const displayProgress = Math.min(progress, 100);
-
     return (
-      <div className="flex h-screen w-screen flex-col items-center justify-center bg-zinc-950 px-12 font-mono text-white">
-        <div className="mx-9 w-[95%] max-w-xl space-y-4">
-          {/* Status text & Percentage */}
-          <div className="flex justify-between text-sm uppercase tracking-widest text-zinc-400">
-            <span>Initializing Game...</span>
-            <span className="font-bold text-red-500">{displayProgress}%</span>
-          </div>
-
-          {/* Track */}
-          <div className="h-1 w-full overflow-hidden rounded-full bg-zinc-800">
-            {/* Fill Bar */}
-            <div
-              className="h-full bg-gradient-to-r from-red-600 to-orange-500 transition-all duration-300 ease-out"
-              style={{ width: `${displayProgress}%` }}
-            />
-          </div>
-        </div>
+      <div className="flex h-screen w-screen items-center justify-center bg-zinc-950 text-white text-7xl">
+        <Spinner className="size-8" />
       </div>
     );
   }

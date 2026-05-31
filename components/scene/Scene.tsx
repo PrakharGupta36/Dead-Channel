@@ -15,7 +15,7 @@ import WeaponSpawner from "@/components/weapons/WeaponSpawner";
 
 import { useMatchProtection } from "@/hooks/useMatchProtection";
 import { Controls } from "@/lib/controls";
-import PerformanceStats from "../debug/PerformanceStats";
+import PerformanceStats from "../game-ui/debug/PerformanceStats";
 import ActivityLog from "../game-ui/hud/ActivityLog";
 import ControlsUI from "../game-ui/hud/Controls-UI";
 
