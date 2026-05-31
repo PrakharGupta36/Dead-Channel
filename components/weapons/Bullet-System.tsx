@@ -8,7 +8,6 @@ import {
   RapierRigidBody,
   RigidBody,
 } from "@react-three/rapier";
-import { useControls } from "leva";
 import { Suspense, useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 
@@ -17,11 +16,6 @@ const BULLET_LIFETIME_MS = 7000;
 type GLTFResult = {
   nodes: { defaultMaterial: THREE.Mesh };
   materials: { openPBR_shader1: THREE.Material };
-};
-
-const bulletTweakConfig = {
-  pos: [0, 0, 0] as [number, number, number],
-  rot: [-Math.PI / 2, 0, 0] as [number, number, number],
 };
 
 function directionToQuat(dir: THREE.Vector3): THREE.Quaternion {
@@ -33,7 +27,6 @@ function directionToQuat(dir: THREE.Vector3): THREE.Quaternion {
 // ─── Single physics bullet ───────────────────────────────────────────────────
 function PhysicsBulletMesh({ bullet }: { bullet: PhysicsBullet }) {
   const rbRef = useRef<RapierRigidBody>(null);
-  const adjustGroupRef = useRef<THREE.Group>(null);
   const removeBullet = useGameStore((s) => s.removeBullet);
   const { nodes, materials } = useGLTF(
     "/models/Bullet.glb",
@@ -73,11 +66,6 @@ function PhysicsBulletMesh({ bullet }: { bullet: PhysicsBullet }) {
         false,
       );
     }
-
-    if (adjustGroupRef.current) {
-      adjustGroupRef.current.position.fromArray(bulletTweakConfig.pos);
-      adjustGroupRef.current.rotation.fromArray(bulletTweakConfig.rot);
-    }
   });
 
   return (
@@ -101,12 +89,15 @@ function PhysicsBulletMesh({ bullet }: { bullet: PhysicsBullet }) {
         if (otherData?.playerId === bullet.shooterId) return;
         removeBullet(bullet.id);
       }}
-      rotation={[0, -2.1, 0]}
+      rotation={[0, -2, 1.6]}
+      scale={0.5}
     >
       <CuboidCollider args={[0.04, 0.04, 0.3]} />
       <Suspense fallback={null}>
         <group scale={0.15} rotation={[0, -Math.PI / 2, 0]}>
-          <group ref={adjustGroupRef}>
+          {/* PLACE YOUR LEVA DERIVED VALUES HERE: */}
+          {/* Replace [0, 0, 0] and [-Math.PI / 2, 0, 0] with your preferred calculated values */}
+          <group position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]}>
             <group rotation={[Math.PI / 2, 0, 0]}>
               <mesh
                 castShadow={false}
@@ -155,36 +146,6 @@ function MuzzleFlash({ bullet }: { bullet: PhysicsBullet }) {
 // ─── Root Bullet System ───────────────────────────────────────────────────────
 export default function BulletSystem() {
   const bullets = useGameStore((s) => s.bullets);
-
-  // Safe SSR check: evaluate the host location on render cleanly without state effects
-  const isLocalhost = useMemo(() => {
-    if (typeof window === "undefined") return false;
-    return (
-      window.location.hostname === "localhost" ||
-      window.location.hostname === "127.0.0.1"
-    );
-  }, []);
-
-  useControls(
-    "Bullet System",
-    {
-      "Bullet Position Offset": {
-        value: [0, 0, 0],
-        step: 0.01,
-        onChange: (v) => {
-          bulletTweakConfig.pos = [v[0], v[1], v[2]];
-        },
-      },
-      "Bullet Rotation Offset": {
-        value: [-Math.PI / 2, 0, 0],
-        step: 0.01,
-        onChange: (v) => {
-          bulletTweakConfig.rot = [v[0], v[1], v[2]];
-        },
-      },
-    },
-    { render: () => isLocalhost },
-  );
 
   return (
     <group name="bullet-system">

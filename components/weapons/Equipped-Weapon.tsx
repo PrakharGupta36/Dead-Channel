@@ -2,7 +2,6 @@
 
 import Guns, { GunType } from "@/components/models/Guns";
 import { useFrame } from "@react-three/fiber";
-import { useControls } from "leva";
 import { forwardRef, useImperativeHandle, useRef } from "react";
 import * as THREE from "three";
 
@@ -28,49 +27,32 @@ type Props = {
   isAiming?: React.MutableRefObject<boolean>;
 };
 
+// ─── Weapon Static Transformations Configuration Map ──────────────────────────
+// Paste your exact positional and rotational offsets determined via Leva below.
+// The default rotation [0, -4.3, 0] is configured as the baseline below.
+const WEAPON_TRANSFORMS: Record<
+  GunType,
+  { pos: [number, number, number]; rot: [number, number, number] }
+> = {
+  pistol: {
+    pos: [0.2, 0, 0], // Insert your custom rifle position values here
+    rot: [-0.1, -5.3, -0.0],
+  },
+  smg: {
+    pos: [0.2, 0, 0], // Insert your custom rifle position values here
+    rot: [-0.1, -5.3, -0.0], // Insert your custom rifle rotation values here
+  },
+  ak47: {
+    pos: [0, 0, 0], // Insert your custom shotgun position values here
+    rot: [0, -4.3, 0], // Insert your custom shotgun rotation values here
+  },
+};
+
 const EquippedWeapon = forwardRef<EquippedWeaponHandle, Props>(
   ({ weapon, isLocal = true, aimPitch, isAiming }, ref) => {
     const armPivotRef = useRef<THREE.Group>(null);
     const gunGroupRef = useRef<THREE.Group>(null);
-    const tweakGroupRef = useRef<THREE.Group>(null);
     const muzzleRef = useRef<THREE.Object3D>(null);
-
-    // Explicitly enforce fixed tuple types so Three.js methods accept them smoothly
-    const liveTweak = useRef<{
-      pos: [number, number, number];
-      rot: [number, number, number];
-    }>({
-      pos: [0, 0, 0],
-      rot: [0, -Math.PI / 2, 0],
-    });
-
-    // Safe inline SSR check: evaluates synchronously on render without setting state
-    const isLocalhost =
-      typeof window !== "undefined" &&
-      (window.location.hostname === "localhost" ||
-        window.location.hostname === "127.0.0.1");
-
-    const folderName = `Weapons Offset System`;
-    useControls(
-      folderName,
-      {
-        [`${weapon} Position`]: {
-          value: [0, 0, 0],
-          step: 0.005,
-          onChange: (v) => {
-            liveTweak.current.pos = [v[0], v[1], v[2]];
-          },
-        },
-        [`${weapon} Rotation`]: {
-          value: [0, -Math.PI / 2, 0],
-          step: 0.01,
-          onChange: (v) => {
-            liveTweak.current.rot = [v[0], v[1], v[2]];
-          },
-        },
-      },
-      { render: () => isLocal && isLocalhost },
-    );
 
     useImperativeHandle(ref, () => ({
       getMuzzleWorldPosition: (out: THREE.Vector3) => {
@@ -83,8 +65,7 @@ const EquippedWeapon = forwardRef<EquippedWeaponHandle, Props>(
     useFrame((_, delta) => {
       const arm = armPivotRef.current;
       const gun = gunGroupRef.current;
-      const tweak = tweakGroupRef.current;
-      if (!arm || !gun || !tweak) return;
+      if (!arm || !gun) return;
 
       const aiming = isAiming?.current ?? false;
       const pitch = aimPitch?.current ?? 0;
@@ -103,26 +84,29 @@ const EquippedWeapon = forwardRef<EquippedWeaponHandle, Props>(
       _euler.set(-arm.rotation.x * 0.6, 0, 0);
       _targetQuat.setFromEuler(_euler);
       gun.quaternion.slerp(_targetQuat, lerpT);
-
-      tweak.position.fromArray(liveTweak.current.pos);
-      tweak.rotation.fromArray(liveTweak.current.rot);
     });
 
     const scale = weapon === "pistol" ? 0.22 : 0.26;
     const muzzleOffset = weapon === "pistol" ? -1.2 : -1.8;
 
+    // Pull calculations seamlessly per unique gun type selection
+    const currentTransform = {
+      pos: [0.2, 0, 0] as [number, number, number],
+      rot: [-0.1, -5.3, -0.0] as [number, number, number],
+    };
+
     return (
       <group
         ref={armPivotRef}
-        position={[.55, 0.6, 0.1]}
+        position={[0.55, 0.6, 0.1]}
         rotation={[0, 2, 0]}
         scale={1.2}
       >
         <group ref={gunGroupRef} position={HIP_POS.toArray()}>
+          {/* Static transformations completely separated from runtime listeners */}
           <group
-            ref={tweakGroupRef}
-            rotation={[0, -4.3, 0]}
-            
+            position={currentTransform.pos}
+            rotation={currentTransform.rot}
           >
             <Guns type={weapon} scale={scale} />
             <object3D
