@@ -26,11 +26,10 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import PlayerBody from "./shared/PlayerBody";
 
-// ADS (aim down sights) constants
 const FOV_DEFAULT = 45;
 const FOV_ADS = 30;
 const ADS_LERP = 0.12;
-const CAM_DIST_ADS = CAM_DIST * 0.6; // tighter zoom when aiming
+const CAM_DIST_ADS = CAM_DIST * 0.6;
 
 export default function LocalPlayer() {
   const player = myPlayer();
@@ -46,13 +45,13 @@ export default function LocalPlayer() {
 
   const yaw = useRef(Math.PI);
   const pitch = useRef(0.3);
-  const isAiming = useRef(false); // RMB held
-  const isShooting = useRef(false); // LMB held
+  const isAiming = useRef(false);
+  const isShooting = useRef(false);
   const currentFov = useRef(FOV_DEFAULT);
-  const isLocked = useRef(false); // pointer lock active
-
-  // Expose pitch so PlayerBody can tilt the weapon arm
+  const isLocked = useRef(false);
   const pitchRef = useRef(0.3);
+
+  const playerPositionRef = useRef(new THREE.Vector3());
 
   const [weapon] = usePlayerState(player, "weapon", null);
   const [customName] = usePlayerState(player, "customName", null);
@@ -78,11 +77,7 @@ export default function LocalPlayer() {
   // ── Pointer Lock ───────────────────────────────────────────────
   useEffect(() => {
     const canvas = gl.domElement;
-
-    const requestLock = () => {
-      canvas.requestPointerLock();
-    };
-
+    const requestLock = () => canvas.requestPointerLock();
     const onLockChange = () => {
       isLocked.current = document.pointerLockElement === canvas;
     };
@@ -91,7 +86,7 @@ export default function LocalPlayer() {
       if (!isLocked.current) return;
       yaw.current -= e.movementX * 0.002;
       pitch.current = Math.max(
-        -0.05, // almost straight up
+        -0.05,
         Math.min(1.3, pitch.current + e.movementY * 0.002),
       );
       pitchRef.current = pitch.current;
@@ -99,14 +94,12 @@ export default function LocalPlayer() {
 
     const onMouseDown = (e: MouseEvent) => {
       if (!isLocked.current) {
-        // First click just captures the pointer
         requestLock();
         return;
       }
       if (e.button === 2) isAiming.current = true;
       if (e.button === 0) {
         isShooting.current = true;
-        // Broadcast a fire event so remotes can react
         if (weapon) setFiringState(!isFiring);
       }
     };
@@ -117,8 +110,6 @@ export default function LocalPlayer() {
     };
 
     const onKeyDown = (e: KeyboardEvent) => {
-      // ESC is handled natively by the browser to release pointer lock
-      // but we still want to let the game know
       if (e.key === "Escape") isLocked.current = false;
     };
 
@@ -128,8 +119,6 @@ export default function LocalPlayer() {
     window.addEventListener("mousedown", onMouseDown);
     window.addEventListener("mouseup", onMouseUp);
     window.addEventListener("keydown", onKeyDown);
-
-    // Prevent right-click context menu inside canvas
     canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 
     return () => {
@@ -178,12 +167,14 @@ export default function LocalPlayer() {
       true,
     );
 
-    // Body faces movement direction
-    if (_moveDir.lengthSq() > 0.001 && meshGroupRef.current) {
+    // ── Body ALWAYS faces camera yaw — not just when moving ──────────────────
+    // This keeps the gun arm and player orientation in sync with where you're aiming.
+    if (meshGroupRef.current) {
+      const targetYaw = yaw.current + Math.PI; // +PI because model faces -Z by default
       meshGroupRef.current.rotation.y = THREE.MathUtils.lerp(
         meshGroupRef.current.rotation.y,
-        Math.atan2(_moveDir.x, _moveDir.z),
-        0.18,
+        targetYaw,
+        1 - Math.exp(-16 * delta), // snappy but smooth
       );
     }
 
@@ -193,6 +184,7 @@ export default function LocalPlayer() {
     }
 
     const t = rb.translation();
+    playerPositionRef.current.set(t.x, t.y, t.z);
 
     // ── Camera ──────────────────────────────────────────────────
     const targetDist = isAiming.current ? CAM_DIST_ADS : CAM_DIST;
@@ -221,9 +213,7 @@ export default function LocalPlayer() {
     const now = performance.now();
     if (player && now - lastNetSync.current > NET_SYNC_INTERVAL_MS) {
       player.setState("position", [t.x, t.y, t.z], false);
-      // Sync yaw so remote players see the body facing the right way
       player.setState("yaw", yaw.current, false);
-      // Sync pitch so remote players see the weapon tilt
       player.setState("pitch", pitch.current, false);
       lastNetSync.current = now;
     }
@@ -244,7 +234,6 @@ export default function LocalPlayer() {
       canSleep={false}
     >
       <CapsuleCollider args={[0.5, 0.5]} />
-
       <PlayerBody
         ref={meshGroupRef}
         color={color}
@@ -254,6 +243,7 @@ export default function LocalPlayer() {
         isLocal
         aimPitch={pitchRef}
         isAiming={isAiming}
+        playerPositionRef={playerPositionRef}
       />
     </RigidBody>
   );

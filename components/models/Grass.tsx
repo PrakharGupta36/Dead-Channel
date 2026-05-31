@@ -35,7 +35,7 @@ const SIMPLEX_GLSL = /* glsl */ `
   }
 `;
 
-// Single shared uniform definition object allocation outside the render cycle loop
+
 const globalWindUniforms = {
   uTime: { value: 0 },
   uWindStrength: { value: new THREE.Vector3(0.3, 0, 0.3) },
@@ -103,7 +103,7 @@ const DEFAULTS: Required<GrassOptions> = {
 
 export function GrassField(props: GrassOptions) {
   const opts = { ...DEFAULTS, ...props } as Required<GrassOptions>;
-  const { scene: grassScene } = useGLTF("/models/grass.glb");
+  const { scene: grassScene } = useGLTF("/models/Grass.glb");
   const meshRef = useRef<THREE.InstancedMesh>(null);
 
   // 1. Visually build the InstancedMesh parameters once via useMemo
@@ -187,5 +187,5 @@ export function GrassField(props: GrassOptions) {
 }
 
 GrassField.preload = () => {
-  useGLTF.preload("/models/grass.glb");
+  useGLTF.preload("/models/Grass.glb");
 };

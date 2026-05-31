@@ -23,27 +23,19 @@ export default function Environment() {
     <>
       {/* 1. Global Setup */}
       <color attach="background" args={[background]} />
-      {/* Fog pulled slightly inward to naturally clip out-of-bounds instanced elements */}
+    
       <fog attach="fog" args={[background, 20, 75]} />
 
-      {/* 2. Light Consolidation: 
-        Replaced the ambient light and 3 separate custom fill/sky-dome directional lights 
-        with a single HemisphereLight. This calculates a perfect sky-to-ground ambient 
-        gradient instantly in a single uniform calculation.
-      */}
+      
       <hemisphereLight
         args={["#b3d1ff", "#4d5933", 0.65]}
         position={[0, 50, 0]}
       />
 
-      {/* 3. Optimized Primary Sun & Shadow Cascades:
-        The Orthographic shadow camera bounds have been tightened down significantly.
-        Reducing the frustum volume prevents the engine from wasting valuable shadow-map depth space.
-      */}
       <directionalLight
         ref={sunRef}
         position={[40, 18, 15]}
-        intensity={1.2}
+        intensity={5.2}
         color="#ffe4a0"
         castShadow
         shadow-mapSize={[1024, 1024]} // Optimized down from 2048 (Saves massive GPU memory bandwith)

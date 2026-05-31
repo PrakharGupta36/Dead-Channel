@@ -4,7 +4,9 @@
 2. Sound Design (this one should be done last after everything is done).
 
 
-3. Gun shooting and bullets (Doing now...)
+3. Gun shooting and bullets (Almost Done). 
+
+
 4. Bullets hitting the other player
 5. Health reducing 
 6. Player scoring system

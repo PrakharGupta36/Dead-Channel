@@ -11,13 +11,15 @@ import PlayerManager from "@/components/multiplayer/shared/PlayerManager";
 import BorderWalls from "@/components/scene/Border-Walls";
 import Environment from "@/components/scene/Environment";
 import Ground from "@/components/scene/Ground";
-import WeaponSpawner from "@/components/weapons/WeaponSpawner";
+import WeaponSpawner from "@/components/weapons/Weapon-Spawner";
 
 import { useMatchProtection } from "@/hooks/useMatchProtection";
 import { Controls } from "@/lib/controls";
 import PerformanceStats from "../game-ui/debug/PerformanceStats";
 import ActivityLog from "../game-ui/hud/ActivityLog";
 import ControlsUI from "../game-ui/hud/Controls-UI";
+import Crosshair from "../game-ui/hud/CrossHair";
+import BulletSystem from "../weapons/Bullet-System";
 
 interface SceneProps {
   gameStarted: boolean;
@@ -97,16 +99,18 @@ export default function Scene({ gameStarted }: SceneProps) {
               colliders={false}
               timeStep={1 / 60}
             >
-              <Ground size={300} playerRef={localPlayerRef}  />
+              <Ground size={300} playerRef={localPlayerRef} />
               <BorderWalls />
               <Trees />
 
               {/* Keep network client states mounted but sleep updates until matching engine fires */}
               <PlayerManager active={gameStarted} />
               <WeaponSpawner active={gameStarted} />
+              <BulletSystem />
             </Physics>
           </Suspense>
         </Canvas>
+        <Crosshair />
 
         {gameStarted && <MemoizedPerformanceStats />}
         <Loader />

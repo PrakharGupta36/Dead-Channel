@@ -1,22 +1,35 @@
 "use client";
 
-import EquippedWeapon from "@/components/weapons/EquippedWeapon";
+import EquippedWeapon, {
+  EquippedWeaponHandle,
+} from "@/components/weapons/Equipped-Weapon";
+import { useFiring } from "@/hooks/useFiring";
+import { GunType } from "@/store/useGameStore";
 import { Html } from "@react-three/drei";
-import { forwardRef } from "react";
+import { forwardRef, useRef } from "react";
 import * as THREE from "three";
 
 interface PlayerBodyProps {
   color: string;
   playerId: string;
   health: number;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  weapon: any;
+  weapon: GunType | null;
   isLocal?: boolean;
-  /** Local-only: live pitch ref so the weapon arm tilts with vertical aim */
   aimPitch?: React.RefObject<number>;
-  /** Local-only: whether RMB is held (ADS) */
   isAiming?: React.RefObject<boolean>;
+  /**
+   * Other players' body groups keyed by their playerId.
+   * Required for local player hit detection.
+   */
+  otherPlayerMeshes?: React.MutableRefObject<Record<string, THREE.Object3D>>;
+  /**
+   * Live world-space position of the local player's RigidBody.
+   * Required for correct bullet origin in third-person (NOT the camera position).
+   */
+  playerPositionRef?: React.MutableRefObject<THREE.Vector3>;
 }
+
+const _fallbackPos = new THREE.Vector3();
 
 const PlayerBody = forwardRef<THREE.Group, PlayerBodyProps>(
   (
@@ -26,26 +39,47 @@ const PlayerBody = forwardRef<THREE.Group, PlayerBodyProps>(
       health,
       weapon,
       isLocal = false,
-
       aimPitch,
       isAiming,
+      otherPlayerMeshes,
+      playerPositionRef,
     },
     ref,
   ) => {
     const clampedHealth = Math.max(0, Math.min(100, health));
+    const weaponRef = useRef<EquippedWeaponHandle>(null);
+    const fallbackPosRef = useRef<THREE.Vector3>(_fallbackPos);
+
+    // ── Firing (local player only) ─────────────────────────────────────────
+    useFiring({
+      weapon: isLocal ? weapon : null,
+      playerId,
+      playerPositionRef: playerPositionRef ?? fallbackPosRef,
+      otherPlayerMeshes: otherPlayerMeshes ?? { current: {} },
+      enabled: isLocal && !!weapon,
+    });
 
     return (
-      <group ref={ref} position={[0, -0.5, 0]}>
-        {/* Capsule body */}
-        <mesh castShadow position={[0, 0.5, 0]}>
+      <group
+        ref={(node) => {
+          if (typeof ref === "function") ref(node);
+          else if (ref)
+            (ref as React.MutableRefObject<THREE.Group | null>).current = node;
+        }}
+        position={[0, -0.5, 0]}
+        userData={{ playerId }}
+      >
+        {/* Capsule body — tagged so raycast can walk up hierarchy */}
+        <mesh castShadow position={[0, 0.5, 0]} userData={{ playerId }}>
           <capsuleGeometry args={[0.5, 1]} />
           <meshStandardMaterial color={color} />
         </mesh>
 
-        {/* Weapon — always mounted, visibility toggled for perf */}
+        {/* Weapon */}
         <group visible={!!weapon}>
           <EquippedWeapon
-            weapon={weapon || "pistol"}
+            ref={weaponRef}
+            weapon={weapon ?? "pistol"}
             isLocal={isLocal}
             aimPitch={aimPitch}
             isAiming={isAiming}
@@ -53,18 +87,11 @@ const PlayerBody = forwardRef<THREE.Group, PlayerBodyProps>(
         </group>
 
         {/* Overhead nameplate + health bar */}
-        <Html position={[0, 2.2, 0]} center distanceFactor={10} occlude>
-          <div className="pointer-events-none relative top-8 select-none ">
+        <Html position={[0, 2.5, 0]} center distanceFactor={10} occlude>
+          <div className="pointer-events-none relative top-8 select-none">
             {/* NAME PLATE */}
             <div className="mb-2 flex justify-center">
-              <div
-                className="
-        relative overflow-hidden 
-      
-      "
-              >
-              
-
+              <div className="relative overflow-hidden">
                 <div className="relative flex items-center gap-2">
                   <div
                     className="h-2 w-2 rounded-full"
@@ -73,12 +100,8 @@ const PlayerBody = forwardRef<THREE.Group, PlayerBodyProps>(
                       boxShadow: `0 0 10px ${color}33`,
                     }}
                   />
-
                   <span
-                    className="
-            font-mono text-[12px] font-semibold uppercase
-            tracking-[0.18em] text-white/88
-          "
+                    className="font-mono text-[12px] font-semibold uppercase tracking-[0.18em] text-white/88"
                     style={{ fontSize: ".5rem" }}
                   >
                     {playerId}
@@ -89,28 +112,14 @@ const PlayerBody = forwardRef<THREE.Group, PlayerBodyProps>(
 
             {/* HEALTH BAR */}
             <div
-              className="
-    relative h-2 w-40 overflow-hidden rounded-full
-    border border-white/[0.05]
-    bg-gradient-to-b from-[#151515] to-[#0a0a0a]
-    p-[2px]
-    shadow-[0_1px_0_#ffffff15,0_2px_8px_#000000aa_inset]
-  "
+              className="relative h-2 w-40 overflow-hidden rounded-full border border-white/[0.05] bg-gradient-to-b from-[#151515] to-[#0a0a0a] p-[2px] shadow-[0_1px_0_#ffffff15,0_2px_8px_#000000aa_inset]"
               style={{ marginTop: "8px" }}
             >
-              {/* cavity */}
               <div className="absolute inset-[2px] rounded-full bg-[#050505]" />
-
-              {/* health fill */}
               <div
-                className="
-      relative h-full rounded-full
-      transition-all duration-300 ease-out
-    "
+                className="relative h-full rounded-full transition-all duration-300 ease-out"
                 style={{
                   width: `${clampedHealth}%`,
-
-                  // GAME-LIKE COLOR TRANSITION
                   background:
                     clampedHealth > 70
                       ? "linear-gradient(180deg,#4ade80 0%,#22c55e 50%,#166534 100%)"
@@ -119,7 +128,6 @@ const PlayerBody = forwardRef<THREE.Group, PlayerBodyProps>(
                         : clampedHealth > 20
                           ? "linear-gradient(180deg,#fb923c 0%,#ea580c 50%,#9a3412 100%)"
                           : "linear-gradient(180deg,#ef4444 0%,#b91c1c 50%,#450a0a 100%)",
-
                   boxShadow:
                     clampedHealth > 70
                       ? "0 0 12px rgba(34,197,94,0.35)"
@@ -130,26 +138,10 @@ const PlayerBody = forwardRef<THREE.Group, PlayerBodyProps>(
                           : "0 0 14px rgba(239,68,68,0.4)",
                 }}
               >
-                {/* glossy top highlight */}
                 <div className="absolute inset-x-0 top-0 h-[1px] bg-white/20" />
-
-                {/* animated shine */}
-                <div
-                  className="
-        absolute inset-0 opacity-40
-        bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.12),transparent)]
-      "
-                />
-
-                {/* danger pulse */}
+                <div className="absolute inset-0 opacity-40 bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.12),transparent)]" />
                 {clampedHealth <= 20 && (
-                  <div
-                    className="
-          absolute inset-0
-          animate-pulse
-          bg-red-500/20
-        "
-                  />
+                  <div className="absolute inset-0 animate-pulse bg-red-500/20" />
                 )}
               </div>
             </div>

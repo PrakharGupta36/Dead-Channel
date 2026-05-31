@@ -20,33 +20,30 @@ export default function RemotePlayer({ player }: Props) {
   const [name] = usePlayerState(player, "name", null);
   const [health] = usePlayerState(player, "health", 100);
   const [weapon] = usePlayerState(player, "weapon", null);
-  // Receive synced aim angles
   const [remoteYaw] = usePlayerState(player, "yaw", Math.PI);
   const [remotePitch] = usePlayerState(player, "pitch", 0.3);
 
-  // Stable refs so EquippedWeapon can read them in useFrame without re-renders
   const pitchRef = useRef<number>(0.3);
-  const aimingRef = useRef<boolean>(false); // remotes never ADS-zoom the camera
+  const aimingRef = useRef<boolean>(false);
 
   useFrame((_, delta) => {
     if (!rbRef.current || !Array.isArray(position)) return;
 
     _remoteTarget.set(position[0], position[1], position[2]);
-
     const t = rbRef.current.translation();
     _remoteCurrent.set(t.x, t.y, t.z);
     _remoteCurrent.lerp(_remoteTarget, 1 - Math.pow(0.01, delta));
 
-    // Face the synced yaw direction
+    // ── Body ALWAYS faces synced yaw — no movement condition ─────────────
     if (meshGroupRef.current) {
+      const targetYaw = (remoteYaw as number) + Math.PI;
       meshGroupRef.current.rotation.y = THREE.MathUtils.lerp(
         meshGroupRef.current.rotation.y,
-        remoteYaw as number,
+        targetYaw,
         0.15,
       );
     }
 
-    // Keep pitch ref up to date for the weapon tilt
     pitchRef.current = THREE.MathUtils.lerp(
       pitchRef.current,
       remotePitch as number,
@@ -68,9 +65,9 @@ export default function RemotePlayer({ player }: Props) {
       type="kinematicPosition"
       colliders={false}
       position={initialPos}
+      userData={{ playerId: player.id }}
     >
       <CapsuleCollider args={[0.5, 0.5]} />
-
       <PlayerBody
         ref={meshGroupRef}
         color={color}
