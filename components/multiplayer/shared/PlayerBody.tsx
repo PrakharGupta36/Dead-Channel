@@ -91,6 +91,7 @@ const PlayerBody = forwardRef<THREE.Group, PlayerBodyProps>(
           ref={audioRef}
           url="/sounds/player/Walking.mp3"
           distance={5}
+          setVolume={0.5}
           loop
           autoplay={false}
         />
