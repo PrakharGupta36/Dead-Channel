@@ -66,10 +66,13 @@ export default function CustomLobby({ onGameStart }: CustomLobbyProps) {
   };
 
   const isMe = (p: PlayerState) => me && p.id === me.id;
+
   const displayName = (p: PlayerState) =>
     (p.getState("customName") as string | undefined) ?? p.getProfile().name;
 
   const emptySlots = Math.max(0, 4 - players.length);
+
+  const currentPlayerName = me ? displayName(me) : "";
 
   return (
     <>

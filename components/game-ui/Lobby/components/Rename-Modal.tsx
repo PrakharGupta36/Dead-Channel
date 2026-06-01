@@ -45,6 +45,9 @@ function RenameModal({ currentName, onCommit, onCancel }: RenameModalProps) {
         bg-black/60
         backdrop-blur-md
       "
+      style={{
+        zIndex: 20,
+      }}
     >
       <div
         onClick={(e) => e.stopPropagation()}
@@ -56,12 +59,14 @@ function RenameModal({ currentName, onCommit, onCancel }: RenameModalProps) {
           rounded-2xl
           border border-zinc-800/80
 
-          bg-zinc-950/95
+          bg-zinc-950
 
           shadow-[0_30px_80px_-20px_rgba(0,0,0,0.85)]
 
-          p-1
-        "
+          p-1        "
+        style={{
+          padding: ".5rem",
+        }}
       >
         {/* Header */}
         <div
@@ -70,8 +75,13 @@ function RenameModal({ currentName, onCommit, onCancel }: RenameModalProps) {
 
             px-5 pt-5 pb-4
 
-            border-b border-zinc-800
+             border-zinc-800
           "
+          style={{
+            // padding: ".5rem",
+            position: "relative",
+            bottom: "10px",
+          }}
         >
           <div
             className="
@@ -101,11 +111,10 @@ function RenameModal({ currentName, onCommit, onCancel }: RenameModalProps) {
             <h2
               className="
                 text-sm
-                font-black
-                uppercase
-                tracking-[0.2em]
+                font-mono
 
                 text-zinc-100
+                
               "
             >
               Rename
@@ -127,8 +136,15 @@ function RenameModal({ currentName, onCommit, onCancel }: RenameModalProps) {
         </div>
 
         {/* Body */}
-        <div className="p-5 pt-4">
-          <div className="relative">
+        <div
+          className="p-5 pt-4 "
+          style={{
+            // padding: ".5rem",
+            position: "relative",
+            bottom: "10px",
+          }}
+        >
+          <div className="relative ">
             <input
               ref={inputRef}
               autoFocus
@@ -185,9 +201,7 @@ function RenameModal({ currentName, onCommit, onCancel }: RenameModalProps) {
             </span>
           </div>
 
-          <div className="my-5 h-px bg-zinc-800/80" />
-
-          <div className="flex gap-3">
+          <div className="flex gap-3 mt-2">
             <button
               type="button"
               onClick={onCancel}
@@ -230,24 +244,29 @@ function RenameModal({ currentName, onCommit, onCancel }: RenameModalProps) {
 
                 rounded-xl
 
-                bg-red-600
+                border border-zinc-800
+              
+
+              
 
                 font-mono
                 text-xs
-                font-black
+                font-bold
 
                 uppercase
-                tracking-[0.18em]
+                tracking-widest
 
-                text-white
+                text-zinc-400
 
                 transition-all duration-200
 
-                hover:bg-red-500
-
-                disabled:cursor-not-allowed
-                disabled:opacity-40
+                hover:bg-zinc-800
+                hover:text-zinc-200
               "
+              style={{
+                backgroundColor: "#b0514c",
+                color: "white",
+              }}
             >
               Confirm
             </button>
