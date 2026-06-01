@@ -5,8 +5,8 @@ import EquippedWeapon, {
 } from "@/components/weapons/Equipped-Weapon";
 import { useFiring } from "@/hooks/useFiring";
 import { GunType } from "@/store/useGameStore";
-import { Html } from "@react-three/drei";
-import { forwardRef, useRef } from "react";
+import { Html, PositionalAudio } from "@react-three/drei";
+import { forwardRef, useEffect, useRef } from "react";
 import * as THREE from "three";
 
 interface PlayerBodyProps {
@@ -17,16 +17,12 @@ interface PlayerBodyProps {
   isLocal?: boolean;
   aimPitch?: React.RefObject<number>;
   isAiming?: React.RefObject<boolean>;
-  /**
-   * Other players' body groups keyed by their playerId.
-   * Required for local player hit detection.
-   */
-  otherPlayerMeshes?: React.MutableRefObject<Record<string, THREE.Object3D>>;
-  /**
-   * Live world-space position of the local player's RigidBody.
-   * Required for correct bullet origin in third-person (NOT the camera position).
-   */
-  playerPositionRef?: React.MutableRefObject<THREE.Vector3>;
+
+  otherPlayerMeshes?: React.RefObject<Record<string, THREE.Object3D>>;
+
+  playerPositionRef?: React.RefObject<THREE.Vector3>;
+
+  isMoving?: boolean;
 }
 
 const _fallbackPos = new THREE.Vector3();
@@ -43,14 +39,15 @@ const PlayerBody = forwardRef<THREE.Group, PlayerBodyProps>(
       isAiming,
       otherPlayerMeshes,
       playerPositionRef,
+      isMoving = false,
     },
     ref,
   ) => {
     const clampedHealth = Math.max(0, Math.min(100, health));
     const weaponRef = useRef<EquippedWeaponHandle>(null);
     const fallbackPosRef = useRef<THREE.Vector3>(_fallbackPos);
+    const audioRef = useRef<THREE.PositionalAudio>(null);
 
-    // ── Firing (local player only) ─────────────────────────────────────────
     useFiring({
       weapon: isLocal ? weapon : null,
       playerId,
@@ -58,6 +55,26 @@ const PlayerBody = forwardRef<THREE.Group, PlayerBodyProps>(
       otherPlayerMeshes: otherPlayerMeshes ?? { current: {} },
       enabled: isLocal && !!weapon,
     });
+
+    useEffect(() => {
+      if (!audioRef.current) return;
+
+      if (isMoving) {
+        if (!audioRef.current.isPlaying) {
+          audioRef.current.play();
+        }
+      } else {
+        if (audioRef.current.isPlaying) {
+          audioRef.current.pause();
+        }
+      }
+    }, [isMoving]);
+
+    useEffect(() => {
+      if (weaponRef.current && weapon) {
+        weaponRef.current.playEquipSound();
+      }
+    }, [weapon]);
 
     return (
       <group
@@ -69,6 +86,15 @@ const PlayerBody = forwardRef<THREE.Group, PlayerBodyProps>(
         position={[0, -0.5, 0]}
         userData={{ playerId }}
       >
+        {/* 3D Spatial Audio Footsteps */}
+        <PositionalAudio
+          ref={audioRef}
+          url="/sounds/player/Walking.mp3"
+          distance={5}
+          loop
+          autoplay={false}
+        />
+
         {/* Capsule body — tagged so raycast can walk up hierarchy */}
         <mesh castShadow position={[0, 0.5, 0]} userData={{ playerId }}>
           <capsuleGeometry args={[0.5, 1]} />

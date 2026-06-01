@@ -4,7 +4,7 @@ import { _remoteCurrent, _remoteTarget } from "@/lib/playerConstants";
 import { useFrame } from "@react-three/fiber";
 import { CapsuleCollider, RigidBody } from "@react-three/rapier";
 import { usePlayerState } from "playroomkit";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import * as THREE from "three";
 import PlayerBody from "./shared/PlayerBody";
 
@@ -25,6 +25,7 @@ export default function RemotePlayer({ player }: Props) {
 
   const pitchRef = useRef<number>(0.3);
   const aimingRef = useRef<boolean>(false);
+  const [isMoving, setIsMoving] = useState(false);
 
   useFrame((_, delta) => {
     if (!rbRef.current || !Array.isArray(position)) return;
@@ -32,6 +33,12 @@ export default function RemotePlayer({ player }: Props) {
     _remoteTarget.set(position[0], position[1], position[2]);
     const t = rbRef.current.translation();
     _remoteCurrent.set(t.x, t.y, t.z);
+
+    // ── Remote Delta Calculation for Sound Triggering ───────────
+    const distanceToTarget = _remoteCurrent.distanceTo(_remoteTarget);
+    const movingNow = distanceToTarget > 0.04;
+    if (isMoving !== movingNow) setIsMoving(movingNow);
+
     _remoteCurrent.lerp(_remoteTarget, 1 - Math.pow(0.01, delta));
 
     // ── Body ALWAYS faces synced yaw — no movement condition ─────────────
@@ -77,6 +84,7 @@ export default function RemotePlayer({ player }: Props) {
         isLocal={false}
         aimPitch={pitchRef}
         isAiming={aimingRef}
+        isMoving={isMoving}
       />
     </RigidBody>
   );

@@ -90,13 +90,12 @@ function PhysicsBulletMesh({ bullet }: { bullet: PhysicsBullet }) {
         removeBullet(bullet.id);
       }}
       rotation={[0, -2, 1.6]}
-      scale={0.5}
+      scale={0.2}
     >
       <CuboidCollider args={[0.04, 0.04, 0.3]} />
       <Suspense fallback={null}>
         <group scale={0.15} rotation={[0, -Math.PI / 2, 0]}>
           {/* PLACE YOUR LEVA DERIVED VALUES HERE: */}
-          {/* Replace [0, 0, 0] and [-Math.PI / 2, 0, 0] with your preferred calculated values */}
           <group position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]}>
             <group rotation={[Math.PI / 2, 0, 0]}>
               <mesh
@@ -119,6 +118,18 @@ function MuzzleFlash({ bullet }: { bullet: PhysicsBullet }) {
   const matRef = useRef<THREE.MeshBasicMaterial>(null);
   const meshRef = useRef<THREE.Mesh>(null);
 
+  // Fire-and-forget gun audio play on component instantiation
+  useEffect(() => {
+    const audio = new Audio("/sounds/weapons/Bullet.mp3");
+    audio.volume = 0.2; // Adjust volume level to balance mix
+    audio.play().catch((err) => {
+      console.warn(
+        "Audio playback blocked by browser autocomplete guardrail:",
+        err,
+      );
+    });
+  }, []);
+
   useFrame(() => {
     const mat = matRef.current;
     const mesh = meshRef.current;
@@ -130,8 +141,12 @@ function MuzzleFlash({ bullet }: { bullet: PhysicsBullet }) {
   });
 
   return (
-    <mesh ref={meshRef} position={bullet.origin} userData={{ isBullet: true }}>
-      <sphereGeometry args={[0.08, 6, 6]} />
+    <mesh
+      ref={meshRef}
+      position={[bullet.origin.x - .7, bullet.origin.y - .3, bullet.origin.z]}
+      userData={{ isBullet: true }}
+    >
+      <sphereGeometry args={[0.1, 6, 6]} />
       <meshBasicMaterial
         ref={matRef}
         color="#fff5a0"

@@ -52,6 +52,7 @@ export default function LocalPlayer() {
   const pitchRef = useRef(0.3);
 
   const playerPositionRef = useRef(new THREE.Vector3());
+  const [isMoving, setIsMoving] = useState(false);
 
   const [weapon] = usePlayerState(player, "weapon", null);
   const [customName] = usePlayerState(player, "customName", null);
@@ -167,14 +168,19 @@ export default function LocalPlayer() {
       true,
     );
 
+    // ── Local Sound Tracking ─────────────────────────────────────
+    const hasInput = forward || backward || leftward || rightward;
+    const isGrounded = Math.abs(vel.y) < 0.05;
+    const movingNow = hasInput && isGrounded;
+    if (isMoving !== movingNow) setIsMoving(movingNow);
+
     // ── Body ALWAYS faces camera yaw — not just when moving ──────────────────
-    // This keeps the gun arm and player orientation in sync with where you're aiming.
     if (meshGroupRef.current) {
-      const targetYaw = yaw.current + Math.PI; // +PI because model faces -Z by default
+      const targetYaw = yaw.current + Math.PI;
       meshGroupRef.current.rotation.y = THREE.MathUtils.lerp(
         meshGroupRef.current.rotation.y,
         targetYaw,
-        1 - Math.exp(-16 * delta), // snappy but smooth
+        1 - Math.exp(-16 * delta),
       );
     }
 
@@ -244,6 +250,7 @@ export default function LocalPlayer() {
         aimPitch={pitchRef}
         isAiming={isAiming}
         playerPositionRef={playerPositionRef}
+        isMoving={isMoving}
       />
     </RigidBody>
   );
