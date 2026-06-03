@@ -1,4 +1,4 @@
-/* eslint-disable react-hooks/immutability */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import { Controls } from "@/lib/controls";
@@ -35,12 +35,11 @@ export default function LocalPlayer() {
   const player = myPlayer();
   const players = usePlayersList();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rbRef = useRef<any>(null);
   const meshGroupRef = useRef<THREE.Group>(null);
   const lastNetSync = useRef(0);
 
-  const { camera, gl } = useThree();
+  const { gl } = useThree(); // camera removed from here
   const [, getKeys] = useKeyboardControls<Controls>();
 
   const yaw = useRef(Math.PI);
@@ -72,8 +71,6 @@ export default function LocalPlayer() {
       : 0;
     return SPAWN_POSITIONS[fallback % SPAWN_POSITIONS.length];
   });
-
-  const [health] = useState(100);
 
   // ── Pointer Lock ───────────────────────────────────────────────
   useEffect(() => {
@@ -130,20 +127,41 @@ export default function LocalPlayer() {
       window.removeEventListener("mouseup", onMouseUp);
       window.removeEventListener("keydown", onKeyDown);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gl, weapon, isFiring]);
+  }, [gl, weapon, isFiring, setFiringState]);
+
+  const [health] = usePlayerState(player, "health", 100);
 
   useEffect(() => {
     if (!player) return;
-    player.setState("health", health);
+    if (player.getState("health") === undefined) {
+      player.setState("health", 100);
+    }
     player.setState("color", color);
     const displayName = customName ?? player.getProfile().name;
     player.setState("name", displayName);
-  }, [player, color, health, customName]);
+  }, [player, color, customName]);
 
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
     const rb = rbRef.current;
     if (!rb) return;
+
+    const syncedPos = player.getState("position");
+    const t = rb.translation();
+
+    if (syncedPos && Array.isArray(syncedPos)) {
+      const distToSynced = new THREE.Vector3(t.x, t.y, t.z).distanceTo(
+        new THREE.Vector3(syncedPos[0], syncedPos[1], syncedPos[2]),
+      );
+
+      if (distToSynced > 4.0) {
+        rb.setTranslation(
+          { x: syncedPos[0], y: syncedPos[1], z: syncedPos[2] },
+          true,
+        );
+        rb.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        return;
+      }
+    }
 
     const { forward, backward, leftward, rightward, jump, run } = getKeys();
     const speed = run ? RUN_SPEED : WALK_SPEED;
@@ -168,13 +186,11 @@ export default function LocalPlayer() {
       true,
     );
 
-    // ── Local Sound Tracking ─────────────────────────────────────
     const hasInput = forward || backward || leftward || rightward;
     const isGrounded = Math.abs(vel.y) < 0.05;
     const movingNow = hasInput && isGrounded;
     if (isMoving !== movingNow) setIsMoving(movingNow);
 
-    // ── Body ALWAYS faces camera yaw — not just when moving ──────────────────
     if (meshGroupRef.current) {
       const targetYaw = yaw.current + Math.PI;
       meshGroupRef.current.rotation.y = THREE.MathUtils.lerp(
@@ -189,10 +205,8 @@ export default function LocalPlayer() {
       rb.setLinvel({ x: freshVel.x, y: JUMP_VEL, z: freshVel.z }, true);
     }
 
-    const t = rb.translation();
     playerPositionRef.current.set(t.x, t.y, t.z);
 
-    // ── Camera ──────────────────────────────────────────────────
     const targetDist = isAiming.current ? CAM_DIST_ADS : CAM_DIST;
     const targetFov = isAiming.current ? FOV_ADS : FOV_DEFAULT;
     currentFov.current = THREE.MathUtils.lerp(
@@ -200,8 +214,10 @@ export default function LocalPlayer() {
       targetFov,
       ADS_LERP,
     );
-    (camera as THREE.PerspectiveCamera).fov = currentFov.current;
-    (camera as THREE.PerspectiveCamera).updateProjectionMatrix();
+
+    const camera = state.camera as THREE.PerspectiveCamera;
+    camera.fov = currentFov.current;
+    camera.updateProjectionMatrix();
 
     _lookAt.lerp(
       new THREE.Vector3(t.x, t.y + CAM_HEIGHT, t.z),
@@ -215,7 +231,6 @@ export default function LocalPlayer() {
     camera.position.lerp(_camPos, 1 - Math.exp(-10 * delta));
     camera.lookAt(_lookAt);
 
-    // ── Net sync ────────────────────────────────────────────────
     const now = performance.now();
     if (player && now - lastNetSync.current > NET_SYNC_INTERVAL_MS) {
       player.setState("position", [t.x, t.y, t.z], false);
@@ -238,6 +253,8 @@ export default function LocalPlayer() {
       linearDamping={4}
       angularDamping={10}
       canSleep={false}
+      // ADD THIS LINE BELOW 👇
+      userData={{ playerId: player.id }}
     >
       <CapsuleCollider args={[0.5, 0.5]} />
       <PlayerBody

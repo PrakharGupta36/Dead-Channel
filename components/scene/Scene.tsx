@@ -1,6 +1,6 @@
 "use client";
 
-import { KeyboardControls, Loader } from "@react-three/drei";
+import { KeyboardControls, Loader, useProgress } from "@react-three/drei"; // Added useProgress
 import { Canvas, useThree } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
 import { memo, Suspense, useEffect, useMemo, useRef } from "react";
@@ -20,6 +20,7 @@ import ActivityLog from "../game-ui/hud/ActivityLog";
 import ControlsUI from "../game-ui/hud/Controls-UI";
 import Crosshair from "../game-ui/hud/CrossHair";
 import BulletSystem from "../weapons/Bullet-System";
+import Leaderboard from "../game-ui/hud/Leaderboard";
 
 interface SceneProps {
   gameStarted: boolean;
@@ -37,6 +38,7 @@ const KEYBOARD_MAP = [
 const MemoizedPerformanceStats = memo(PerformanceStats);
 const MemoizedActivityLog = memo(ActivityLog);
 const MemoizedControlsUI = memo(ControlsUI);
+const MemoizedLeaderboard = memo(Leaderboard);
 
 // ─── Base Global Audio Loop Manager ─────────────────────────────────────────
 function GlobalAmbience({ url }: { url: string }) {
@@ -97,12 +99,13 @@ function GlobalAmbience({ url }: { url: string }) {
   return null;
 }
 
-// ─── Memoized Component Allocation ───────────────────────────────────────────
-// This tells React: "Unless the 'url' prop strings change, do not touch this."
 const MemoizedGlobalAmbience = memo(GlobalAmbience);
 
 export default function Scene({ gameStarted }: SceneProps) {
   const localPlayerRef = useRef<THREE.Group>(null);
+
+  // Hook into Drei's global loading manager state
+  const { active: loadingActive } = useProgress();
 
   useMatchProtection({
     enabled: gameStarted,
@@ -135,47 +138,58 @@ export default function Scene({ gameStarted }: SceneProps) {
   );
 
   return (
-    <div className="w-full h-full select-none overflow-hidden bg-zinc-950">
-      <KeyboardControls map={KEYBOARD_MAP}>
-        <Canvas
-          shadows={false}
-          gl={glOptions}
-          camera={cameraOptions}
-          dpr={[0.5, 0.85]}
-          frameloop={gameStarted ? "always" : "demand"}
-          performance={{ min: 0.5 }}
-        >
-          <Suspense fallback={null}>
-            <Environment />
+    <div className="w-full h-full select-none overflow-hidden bg-zinc-950 relative">
+      {/* This wrapper holds all your layout elements. It stays hidden until 
+        loadingActive evaluates to false, ensuring a clean fade-in sequence.
+      */}
+      <div
+        className={`w-full h-full transition-opacity duration-500 ${
+          loadingActive ? "opacity-0 pointer-events-none" : "opacity-100"
+        }`}
+      >
+        <KeyboardControls map={KEYBOARD_MAP}>
+          <Canvas
+            shadows={false}
+            gl={glOptions}
+            camera={cameraOptions}
+            dpr={[0.5, 0.85]}
+            frameloop={gameStarted ? "always" : "demand"}
+            performance={{ min: 0.5 }}
+          >
+            <Suspense fallback={null}>
+              <Environment />
 
-            {/* Using the memoized wrapper component */}
-            {gameStarted && (
-              <MemoizedGlobalAmbience url="/sounds/utils/Ambience.mp3" />
-            )}
+              {gameStarted && (
+                <MemoizedGlobalAmbience url="/sounds/utils/Ambience.mp3" />
+              )}
 
-            <Physics
-              gravity={[0, -9.81, 0]}
-              colliders={false}
-              timeStep={1 / 60}
-            >
-              <Ground size={300} playerRef={localPlayerRef} />
-              <BorderWalls />
-              <Trees />
+              <Physics
+                gravity={[0, -9.81, 0]}
+                colliders={false}
+                timeStep={1 / 60}
+              >
+                <Ground size={300} playerRef={localPlayerRef} />
+                <BorderWalls />
+                <Trees />
 
-              <PlayerManager active={gameStarted} />
-              <WeaponSpawner active={gameStarted} />
-              <BulletSystem />
-            </Physics>
-          </Suspense>
-        </Canvas>
-        <Crosshair />
+                <PlayerManager active={gameStarted} />
+                <WeaponSpawner active={gameStarted} />
+                <BulletSystem />
+              </Physics>
+            </Suspense>
+          </Canvas>
+          <Crosshair />
 
-        {gameStarted && <MemoizedPerformanceStats />}
-        <Loader />
-      </KeyboardControls>
+          {gameStarted && <MemoizedPerformanceStats />}
+          {gameStarted && <MemoizedLeaderboard />}
+        </KeyboardControls>
 
-      {gameStarted && <MemoizedActivityLog />}
-      {gameStarted && <MemoizedControlsUI />}
+        {gameStarted && <MemoizedActivityLog />}
+        {gameStarted && <MemoizedControlsUI />}
+      </div>
+
+      {/* The Loader element is isolated so it always renders seamlessly on top */}
+      <Loader />
     </div>
   );
 }

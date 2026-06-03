@@ -57,12 +57,12 @@ export default function ActivityLog() {
   }, []);
 
   return (
-    <div className="absolute top-4 right-4 z-50 flex flex-col gap-3 w-80 pointer-events-none select-none">
-      {logs.map((log) => (
+    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 flex flex-col items-center gap-3 w-80 pointer-events-none select-none scale-75">
+      {logs.map((log) => ( 
         <div
           key={log.id}
           className="
-            w-full transform animate-slide-in p-2 rounded-lg 
+            w-[80%] transform animate-slide-in p-2 rounded-lg 
             bg-gradient-to-b from-[#202020] to-[#191919]
             shadow-[0_0.5px_0px_#ffffff1a_inset,0_1px_0.5px_#ffffff25_inset,0_10px_10px_-9px_#00000090,0_20px_20px_-14px_#00000080,0_0px_6px_0px_#00000090]
             flex items-center gap-2.5 border border-black/40

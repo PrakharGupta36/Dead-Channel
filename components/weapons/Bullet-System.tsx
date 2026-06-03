@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import { PhysicsBullet, useGameStore } from "@/store/useGameStore";
@@ -11,6 +12,59 @@ import {
 import { Suspense, useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 
+import { SPAWN_POSITIONS } from "@/lib/playerConstants";
+import { usePlayersList } from "playroomkit";
+
+function handlePlayerHit(
+  players: any[],
+  targetPlayerId: string,
+  damage: number,
+  shooterId: string,
+) {
+  // if (!isHost()) return;
+
+  const targetPlayer = players.find((p: any) => p.id === targetPlayerId);
+  if (!targetPlayer) return;
+
+  const currentHealth = targetPlayer.getState("health") ?? 100;
+  if (currentHealth <= 0) return;
+
+  const newHealth = Math.max(0, currentHealth - damage);
+  targetPlayer.setState("health", newHealth);
+
+  if (newHealth <= 0) {
+    // 1. Trigger Respawn
+    respawnPlayer(targetPlayer, players);
+
+    if (shooterId && shooterId !== targetPlayerId) {
+      const shooterPlayer = players.find((p: any) => p.id === shooterId);
+      if (shooterPlayer) {
+        const currentKills = shooterPlayer.getState("kills") ?? 0;
+        shooterPlayer.setState("kills", currentKills + 1);
+      }
+    }
+  }
+}
+
+function respawnPlayer(player: any, playersList: any[]) {
+  // if (!isHost()) return;
+
+  setTimeout(() => {
+    player.setState("health", 100);
+
+    const sortedPlayers = [...playersList].sort((a: any, b: any) =>
+      a.id.localeCompare(b.id),
+    );
+    const index = sortedPlayers.findIndex((p: any) => p.id === player.id);
+
+    const spawnPos = SPAWN_POSITIONS[index % SPAWN_POSITIONS.length] || [
+      0, 0.5, 0,
+    ];
+
+    player.setState("position", spawnPos);
+  }, 1000);
+}
+
 const BULLET_LIFETIME_MS = 7000;
 
 type GLTFResult = {
@@ -23,14 +77,15 @@ function directionToQuat(dir: THREE.Vector3): THREE.Quaternion {
   q.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir.clone().normalize());
   return q;
 }
-
-// ─── Single physics bullet ───────────────────────────────────────────────────
 function PhysicsBulletMesh({ bullet }: { bullet: PhysicsBullet }) {
   const rbRef = useRef<RapierRigidBody>(null);
   const removeBullet = useGameStore((s) => s.removeBullet);
   const { nodes, materials } = useGLTF(
     "/models/Bullet.glb",
   ) as unknown as GLTFResult;
+
+  // FIX 6: Fetch the players list legally inside the React component!
+  const players = usePlayersList();
 
   const worldQuat = useMemo(
     () => directionToQuat(bullet.direction),
@@ -85,8 +140,18 @@ function PhysicsBulletMesh({ bullet }: { bullet: PhysicsBullet }) {
       }}
       onCollisionEnter={({ other }) => {
         const otherData = other.rigidBodyObject?.userData;
+
         if (otherData?.isBullet) return;
         if (otherData?.playerId === bullet.shooterId) return;
+
+        if (otherData?.playerId) {
+          const targetPlayerId = otherData.playerId;
+          const damage = bullet.damage || 20;
+
+          // FIX 7: Pass the `players` array into your hit function
+          handlePlayerHit(players, targetPlayerId, damage, bullet.shooterId);
+        }
+
         removeBullet(bullet.id);
       }}
       rotation={[0, -2, 1.6]}
@@ -95,7 +160,6 @@ function PhysicsBulletMesh({ bullet }: { bullet: PhysicsBullet }) {
       <CuboidCollider args={[0.04, 0.04, 0.3]} />
       <Suspense fallback={null}>
         <group scale={0.15} rotation={[0, -Math.PI / 2, 0]}>
-          {/* PLACE YOUR LEVA DERIVED VALUES HERE: */}
           <group position={[0, 0, 0]} rotation={[-Math.PI / 2, 0, 0]}>
             <group rotation={[Math.PI / 2, 0, 0]}>
               <mesh
@@ -112,6 +176,8 @@ function PhysicsBulletMesh({ bullet }: { bullet: PhysicsBullet }) {
     </RigidBody>
   );
 }
+
+// ... (MuzzleFlash and BulletSystem components remain the same)
 
 // ─── Muzzle flash ─────────────────────────────────────────────────────────────
 function MuzzleFlash({ bullet }: { bullet: PhysicsBullet }) {
@@ -143,7 +209,7 @@ function MuzzleFlash({ bullet }: { bullet: PhysicsBullet }) {
   return (
     <mesh
       ref={meshRef}
-      position={[bullet.origin.x - .7, bullet.origin.y - .3, bullet.origin.z]}
+      position={[bullet.origin.x - 0.7, bullet.origin.y - 0.3, bullet.origin.z]}
       userData={{ isBullet: true }}
     >
       <sphereGeometry args={[0.1, 6, 6]} />

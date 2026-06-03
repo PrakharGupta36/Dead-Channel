@@ -24,10 +24,8 @@ export default function PlayerManager({ active }: PlayerManagerProps) {
 
   return (
     <>
-      {/* LOCAL PLAYER — Only spins up when the session simulation is active */}
       <LocalPlayer />
 
-      {/* REMOTE PLAYERS — Reuses existing VDOM nodes perfectly */}
       {remotePlayers.map((player) => (
         <RemotePlayer key={player.id} player={player} />
       ))}

@@ -43,10 +43,20 @@ const PlayerBody = forwardRef<THREE.Group, PlayerBodyProps>(
     },
     ref,
   ) => {
-    const clampedHealth = Math.max(0, Math.min(100, health));
     const weaponRef = useRef<EquippedWeaponHandle>(null);
     const fallbackPosRef = useRef<THREE.Vector3>(_fallbackPos);
     const audioRef = useRef<THREE.PositionalAudio>(null);
+
+    const clampedHealth = Math.max(0, Math.min(100, health));
+    const prevHealthRef = useRef(clampedHealth);
+
+    // Detect if the player just respawned so we can snap the health bar back to full instantly
+    const isRespawn =
+      clampedHealth > prevHealthRef.current && prevHealthRef.current === 0;
+
+    useEffect(() => {
+      prevHealthRef.current = clampedHealth;
+    }, [clampedHealth]);
 
     useFiring({
       weapon: isLocal ? weapon : null,
@@ -144,9 +154,13 @@ const PlayerBody = forwardRef<THREE.Group, PlayerBodyProps>(
             >
               <div className="absolute inset-[2px] rounded-full bg-[#050505]" />
               <div
-                className="relative h-full rounded-full transition-all duration-300 ease-out"
+                className="relative h-full rounded-full"
                 style={{
                   width: `${clampedHealth}%`,
+                  // Use an inline transition override so respawns snap instantly, but hits animate smoothly
+                  transition: isRespawn
+                    ? "none"
+                    : "width 300ms ease-out, background-color 300ms linear",
                   background:
                     clampedHealth > 70
                       ? "linear-gradient(180deg,#4ade80 0%,#22c55e 50%,#166534 100%)"
