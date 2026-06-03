@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import { _remoteCurrent, _remoteTarget } from "@/lib/playerConstants";
@@ -9,6 +8,7 @@ import { useRef, useState } from "react";
 import * as THREE from "three";
 import PlayerBody from "./shared/PlayerBody";
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
 type Props = { player: any };
 
 export default function RemotePlayer({ player }: Props) {
@@ -34,23 +34,14 @@ export default function RemotePlayer({ player }: Props) {
     const t = rbRef.current.translation();
     _remoteCurrent.set(t.x, t.y, t.z);
 
-    // ── FIX 1: Host-Spawn Teleportation Guardrail ──────────────────────────
-    // If the remote player has drifted more than 6 meters (like during initial host placement),
-    // immediately hard-teleport their physics body instead of slow lerping across the map.
-    const strictDistance = _remoteCurrent.distanceTo(_remoteTarget);
-    if (strictDistance > 6.0) {
-      rbRef.current.setTranslation(_remoteTarget, true);
-      return;
-    }
-
-    // ── Remote Delta Calculation for Sound Triggering ────────────────────────
+    // ── Remote Delta Calculation for Sound Triggering ───────────
     const distanceToTarget = _remoteCurrent.distanceTo(_remoteTarget);
     const movingNow = distanceToTarget > 0.04;
     if (isMoving !== movingNow) setIsMoving(movingNow);
 
     _remoteCurrent.lerp(_remoteTarget, 1 - Math.pow(0.01, delta));
 
-    // ── Body ALWAYS faces synced yaw — no movement condition ─────────────────
+    // ── Body ALWAYS faces synced yaw — no movement condition ─────────────
     if (meshGroupRef.current) {
       const targetYaw = (remoteYaw as number) + Math.PI;
       meshGroupRef.current.rotation.y = THREE.MathUtils.lerp(
@@ -75,21 +66,22 @@ export default function RemotePlayer({ player }: Props) {
 
   const displayName = name ?? player.getProfile().name ?? "Player";
 
+  // ... around line 76 inside return statement:
   return (
     <RigidBody
       ref={rbRef}
       type="kinematicPosition"
       colliders={false}
       position={initialPos}
-      userData={{ playerId: player.id }} // Used by Bullet System to score exact damage indices
+      userData={{ playerId: player.id }}
     >
       <CapsuleCollider args={[0.5, 0.5]} />
-      {/* Wrap body or make transparent when dead */}
       <group visible={health > 0}>
         <PlayerBody
           ref={meshGroupRef}
           color={color}
-          playerId={displayName}
+          playerId={player.id} 
+          displayName={displayName}
           health={health}
           weapon={weapon}
           isLocal={false}

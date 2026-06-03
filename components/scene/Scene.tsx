@@ -1,6 +1,6 @@
 "use client";
 
-import { KeyboardControls, Loader, useProgress } from "@react-three/drei"; // Added useProgress
+import { KeyboardControls, Loader, useProgress } from "@react-three/drei";
 import { Canvas, useThree } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
 import { memo, Suspense, useEffect, useMemo, useRef } from "react";
@@ -16,7 +16,7 @@ import WeaponSpawner from "@/components/weapons/Weapon-Spawner";
 import { useMatchProtection } from "@/hooks/useMatchProtection";
 import { Controls } from "@/lib/controls";
 import PerformanceStats from "../game-ui/debug/PerformanceStats";
-import ActivityLog from "../game-ui/hud/ActivityLog";
+import ActivityLog from "../game-ui/hud/Activity-Log";
 import ControlsUI from "../game-ui/hud/Controls-UI";
 import Crosshair from "../game-ui/hud/CrossHair";
 import BulletSystem from "../weapons/Bullet-System";
@@ -139,9 +139,7 @@ export default function Scene({ gameStarted }: SceneProps) {
 
   return (
     <div className="w-full h-full select-none overflow-hidden bg-zinc-950 relative">
-      {/* This wrapper holds all your layout elements. It stays hidden until 
-        loadingActive evaluates to false, ensuring a clean fade-in sequence.
-      */}
+      
       <div
         className={`w-full h-full transition-opacity duration-500 ${
           loadingActive ? "opacity-0 pointer-events-none" : "opacity-100"
@@ -188,7 +186,7 @@ export default function Scene({ gameStarted }: SceneProps) {
         {gameStarted && <MemoizedControlsUI />}
       </div>
 
-      {/* The Loader element is isolated so it always renders seamlessly on top */}
+     
       <Loader />
     </div>
   );

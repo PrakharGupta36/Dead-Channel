@@ -11,17 +11,15 @@ import * as THREE from "three";
 
 interface PlayerBodyProps {
   color: string;
-  playerId: string;
+  playerId: string; // 💡 Now strictly maps to Playroom's internal player.id
+  displayName: string; // 💡 NEW: Explicitly pass the display name for UI
   health: number;
   weapon: GunType | null;
   isLocal?: boolean;
   aimPitch?: React.RefObject<number>;
   isAiming?: React.RefObject<boolean>;
-
   otherPlayerMeshes?: React.RefObject<Record<string, THREE.Object3D>>;
-
   playerPositionRef?: React.RefObject<THREE.Vector3>;
-
   isMoving?: boolean;
 }
 
@@ -32,6 +30,7 @@ const PlayerBody = forwardRef<THREE.Group, PlayerBodyProps>(
     {
       color,
       playerId,
+      displayName, // Destructure the new prop
       health,
       weapon,
       isLocal = false,
@@ -50,7 +49,6 @@ const PlayerBody = forwardRef<THREE.Group, PlayerBodyProps>(
     const clampedHealth = Math.max(0, Math.min(100, health));
     const prevHealthRef = useRef(clampedHealth);
 
-    // Detect if the player just respawned so we can snap the health bar back to full instantly
     const isRespawn =
       clampedHealth > prevHealthRef.current && prevHealthRef.current === 0;
 
@@ -94,9 +92,8 @@ const PlayerBody = forwardRef<THREE.Group, PlayerBodyProps>(
             (ref as React.MutableRefObject<THREE.Group | null>).current = node;
         }}
         position={[0, -0.5, 0]}
-        userData={{ playerId }}
+        userData={{ playerId }} // 💡 Now safely keeps a stable ID for bullet hits
       >
-        {/* 3D Spatial Audio Footsteps */}
         <PositionalAudio
           ref={audioRef}
           url="/sounds/player/Walking.mp3"
@@ -106,13 +103,11 @@ const PlayerBody = forwardRef<THREE.Group, PlayerBodyProps>(
           autoplay={false}
         />
 
-        {/* Capsule body — tagged so raycast can walk up hierarchy */}
         <mesh castShadow position={[0, 0.5, 0]} userData={{ playerId }}>
           <capsuleGeometry args={[0.5, 1]} />
           <meshStandardMaterial color={color} />
         </mesh>
 
-        {/* Weapon */}
         <group visible={!!weapon}>
           <EquippedWeapon
             ref={weaponRef}
@@ -123,7 +118,6 @@ const PlayerBody = forwardRef<THREE.Group, PlayerBodyProps>(
           />
         </group>
 
-        {/* Overhead nameplate + health bar */}
         <Html position={[0, 2.5, 0]} center distanceFactor={10} occlude>
           <div className="pointer-events-none relative top-8 select-none">
             {/* NAME PLATE */}
@@ -141,7 +135,7 @@ const PlayerBody = forwardRef<THREE.Group, PlayerBodyProps>(
                     className="font-mono text-[12px] font-semibold uppercase tracking-[0.18em] text-white/88"
                     style={{ fontSize: ".5rem" }}
                   >
-                    {playerId}
+                    {displayName} {/* 💡 UI correctly displays profile names */}
                   </span>
                 </div>
               </div>
@@ -157,7 +151,6 @@ const PlayerBody = forwardRef<THREE.Group, PlayerBodyProps>(
                 className="relative h-full rounded-full"
                 style={{
                   width: `${clampedHealth}%`,
-                  // Use an inline transition override so respawns snap instantly, but hits animate smoothly
                   transition: isRespawn
                     ? "none"
                     : "width 300ms ease-out, background-color 300ms linear",

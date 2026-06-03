@@ -244,6 +244,7 @@ export default function LocalPlayer() {
 
   const displayName = customName ?? player.getProfile().name ?? "Player";
 
+  // ... around line 231 inside return statement:
   return (
     <RigidBody
       ref={rbRef}
@@ -253,14 +254,14 @@ export default function LocalPlayer() {
       linearDamping={4}
       angularDamping={10}
       canSleep={false}
-      // ADD THIS LINE BELOW 👇
       userData={{ playerId: player.id }}
     >
       <CapsuleCollider args={[0.5, 0.5]} />
       <PlayerBody
         ref={meshGroupRef}
         color={color}
-        playerId={displayName}
+        playerId={player.id} 
+        displayName={displayName} 
         health={health}
         weapon={weapon}
         isLocal

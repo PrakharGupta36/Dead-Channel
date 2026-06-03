@@ -13,16 +13,15 @@ import { Suspense, useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 
 import { SPAWN_POSITIONS } from "@/lib/playerConstants";
-import { usePlayersList } from "playroomkit";
+import { isHost, myPlayer, RPC, usePlayersList } from "playroomkit";
 
 function handlePlayerHit(
   players: any[],
   targetPlayerId: string,
   damage: number,
   shooterId: string,
+  bulletId: string, // 💡 Pass bulletId down to create a unique kill transaction identifier
 ) {
-  // if (!isHost()) return;
-
   const targetPlayer = players.find((p: any) => p.id === targetPlayerId);
   if (!targetPlayer) return;
 
@@ -33,7 +32,6 @@ function handlePlayerHit(
   targetPlayer.setState("health", newHealth);
 
   if (newHealth <= 0) {
-    // 1. Trigger Respawn
     respawnPlayer(targetPlayer, players);
 
     if (shooterId && shooterId !== targetPlayerId) {
@@ -41,14 +39,32 @@ function handlePlayerHit(
       if (shooterPlayer) {
         const currentKills = shooterPlayer.getState("kills") ?? 0;
         shooterPlayer.setState("kills", currentKills + 1);
+
+        const shooterName =
+          shooterPlayer.getState("name") ??
+          shooterPlayer.getProfile().name ??
+          "Player";
+        const targetName =
+          targetPlayer.getState("name") ??
+          targetPlayer.getProfile().name ??
+          "Player";
+
+        // ── 💡 FIX: Pass a unique killId transaction token generated from the bullet's unique ID ──
+        RPC.call(
+          "player_kill_event",
+          {
+            killId: `${bulletId}_kill`,
+            shooterName,
+            targetName,
+          },
+          RPC.Mode.ALL,
+        );
       }
     }
   }
 }
 
 function respawnPlayer(player: any, playersList: any[]) {
-  // if (!isHost()) return;
-
   setTimeout(() => {
     player.setState("health", 100);
 
@@ -65,8 +81,6 @@ function respawnPlayer(player: any, playersList: any[]) {
   }, 1000);
 }
 
-const BULLET_LIFETIME_MS = 7000;
-
 type GLTFResult = {
   nodes: { defaultMaterial: THREE.Mesh };
   materials: { openPBR_shader1: THREE.Material };
@@ -77,6 +91,7 @@ function directionToQuat(dir: THREE.Vector3): THREE.Quaternion {
   q.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir.clone().normalize());
   return q;
 }
+
 function PhysicsBulletMesh({ bullet }: { bullet: PhysicsBullet }) {
   const rbRef = useRef<RapierRigidBody>(null);
   const removeBullet = useGameStore((s) => s.removeBullet);
@@ -84,14 +99,13 @@ function PhysicsBulletMesh({ bullet }: { bullet: PhysicsBullet }) {
     "/models/Bullet.glb",
   ) as unknown as GLTFResult;
 
-  // FIX 6: Fetch the players list legally inside the React component!
   const players = usePlayersList();
+  const me = myPlayer();
 
   const worldQuat = useMemo(
     () => directionToQuat(bullet.direction),
     [bullet.direction],
   );
-
   const initVel = useMemo(
     () => ({
       x: bullet.direction.x * bullet.speed,
@@ -109,7 +123,7 @@ function PhysicsBulletMesh({ bullet }: { bullet: PhysicsBullet }) {
   }, [initVel]);
 
   useEffect(() => {
-    const timer = setTimeout(() => removeBullet(bullet.id), BULLET_LIFETIME_MS);
+    const timer = setTimeout(() => removeBullet(bullet.id), 7000);
     return () => clearTimeout(timer);
   }, [bullet.id, removeBullet]);
 
@@ -148,8 +162,21 @@ function PhysicsBulletMesh({ bullet }: { bullet: PhysicsBullet }) {
           const targetPlayerId = otherData.playerId;
           const damage = bullet.damage || 20;
 
-          // FIX 7: Pass the `players` array into your hit function
-          handlePlayerHit(players, targetPlayerId, damage, bullet.shooterId);
+          const isMyBullet = me && bullet.shooterId === me.id;
+          const shooterStillActive = players.some(
+            (p) => p.id === bullet.shooterId,
+          );
+
+          // ── 💡 FIX: Only run if it's my bullet, or if I'm Host and the original shooter disconnected ──
+          if (isMyBullet || (isHost() && !shooterStillActive)) {
+            handlePlayerHit(
+              players,
+              targetPlayerId,
+              damage,
+              bullet.shooterId,
+              bullet.id,
+            );
+          }
         }
 
         removeBullet(bullet.id);
@@ -177,23 +204,14 @@ function PhysicsBulletMesh({ bullet }: { bullet: PhysicsBullet }) {
   );
 }
 
-// ... (MuzzleFlash and BulletSystem components remain the same)
-
-// ─── Muzzle flash ─────────────────────────────────────────────────────────────
 function MuzzleFlash({ bullet }: { bullet: PhysicsBullet }) {
   const matRef = useRef<THREE.MeshBasicMaterial>(null);
   const meshRef = useRef<THREE.Mesh>(null);
 
-  // Fire-and-forget gun audio play on component instantiation
   useEffect(() => {
     const audio = new Audio("/sounds/weapons/Bullet.mp3");
-    audio.volume = 0.2; // Adjust volume level to balance mix
-    audio.play().catch((err) => {
-      console.warn(
-        "Audio playback blocked by browser autocomplete guardrail:",
-        err,
-      );
-    });
+    audio.volume = 0.2;
+    audio.play().catch(() => {});
   }, []);
 
   useFrame(() => {
@@ -224,10 +242,8 @@ function MuzzleFlash({ bullet }: { bullet: PhysicsBullet }) {
   );
 }
 
-// ─── Root Bullet System ───────────────────────────────────────────────────────
 export default function BulletSystem() {
   const bullets = useGameStore((s) => s.bullets);
-
   return (
     <group name="bullet-system">
       {bullets.map((b) => (

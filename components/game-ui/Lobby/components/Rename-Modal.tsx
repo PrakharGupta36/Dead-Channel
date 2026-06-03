@@ -44,6 +44,7 @@ function RenameModal({ currentName, onCommit, onCancel }: RenameModalProps) {
 
         bg-black/60
         backdrop-blur-md
+        
       "
       style={{
         zIndex: 20,
@@ -57,7 +58,7 @@ function RenameModal({ currentName, onCommit, onCancel }: RenameModalProps) {
           overflow-hidden
 
           rounded-2xl
-          border border-zinc-800/80
+          border border-white/50
 
           bg-zinc-950
 
