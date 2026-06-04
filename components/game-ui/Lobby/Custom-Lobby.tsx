@@ -45,8 +45,15 @@ export default function CustomLobby({ onGameStart }: CustomLobbyProps) {
   const handleStartGame = () => {
     if (!host) return;
     setStartReady(true);
+
     setTimeout(() => {
-      setState("gameObjective", objective);
+      // ── 💡 NEW MATCH INCEPTION REGISTRATION ─────────────────────────────
+      const targetValue = parseInt(objective.split("_")[0], 10) || 5;
+
+      setState("winTarget", targetValue);
+      setState("gameMode", "deathmatch");
+      setState("startingPlayerCount", players.length);
+      setState("matchState", "PLAYING");
       setState("gameStarted", true);
     }, 200);
   };
@@ -58,7 +65,7 @@ export default function CustomLobby({ onGameStart }: CustomLobbyProps) {
   };
 
   const handleRenameCommit = (name: string) => {
-    const currentPlayer = myPlayer(); // pull fresh reference
+    const currentPlayer = myPlayer();
     if (!currentPlayer) return;
 
     currentPlayer.setState("customName", name);
@@ -71,8 +78,6 @@ export default function CustomLobby({ onGameStart }: CustomLobbyProps) {
     (p.getState("customName") as string | undefined) ?? p.getProfile().name;
 
   const emptySlots = Math.max(0, 4 - players.length);
-
-  const currentPlayerName = me ? displayName(me) : "";
 
   return (
     <>

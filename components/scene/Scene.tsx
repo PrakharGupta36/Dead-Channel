@@ -1,10 +1,10 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { KeyboardControls, Loader, useProgress } from "@react-three/drei";
-import { Canvas, useThree } from "@react-three/fiber";
+import { KeyboardControls, Loader } from "@react-three/drei";
+import { Canvas } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
-import { memo, Suspense, useEffect, useMemo, useRef } from "react";
-import * as THREE from "three";
+import { memo, Suspense, useEffect, useRef } from "react";
 
 import Trees from "@/components/models/Trees";
 import PlayerManager from "@/components/multiplayer/shared/PlayerManager";
@@ -13,14 +13,17 @@ import Environment from "@/components/scene/Environment";
 import Ground from "@/components/scene/Ground";
 import WeaponSpawner from "@/components/weapons/Weapon-Spawner";
 
-import { useMatchProtection } from "@/hooks/useMatchProtection";
 import { Controls } from "@/lib/controls";
 import PerformanceStats from "../game-ui/debug/PerformanceStats";
-import ActivityLog from "../game-ui/hud/Activity-Log";
+
 import ControlsUI from "../game-ui/hud/Controls-UI";
 import Crosshair from "../game-ui/hud/CrossHair";
-import BulletSystem from "../weapons/Bullet-System";
 import Leaderboard from "../game-ui/hud/Leaderboard";
+import BulletSystem from "../weapons/Bullet-System";
+
+import { isHost, useMultiplayerState, usePlayersList } from "playroomkit";
+import ActivityLog from "../game-ui/hud/Activity-Log";
+import GameOverOverlay from "../game-ui/hud/GameOverOverlay";
 
 interface SceneProps {
   gameStarted: boolean;
@@ -32,114 +35,64 @@ const KEYBOARD_MAP = [
   { name: Controls.leftward, keys: ["KeyA", "ArrowLeft"] },
   { name: Controls.rightward, keys: ["KeyD", "ArrowRight"] },
   { name: Controls.jump, keys: ["Space"] },
-  { name: Controls.run, keys: ["Shift"] },
+  // { name: Controls.shoot, keys: ["MouseButton0"] },
+  // { name: Controls.aim, keys: ["MouseButton2", "KeyI"] },
 ];
 
+const glOptions = {
+  antialias: true,
+  powerPreference: "high-performance" as const,
+};
+const cameraOptions = {
+  fov: 45,
+  near: 0.1,
+  far: 100,
+  position: [0, 5, 10] as [number, number, number],
+};
+
 const MemoizedPerformanceStats = memo(PerformanceStats);
+const MemoizedLeaderboard = memo(Leaderboard);
 const MemoizedActivityLog = memo(ActivityLog);
 const MemoizedControlsUI = memo(ControlsUI);
-const MemoizedLeaderboard = memo(Leaderboard);
-
-// ─── Base Global Audio Loop Manager ─────────────────────────────────────────
-function GlobalAmbience({ url }: { url: string }) {
-  const { camera } = useThree();
-
-  const listenerRef = useRef<THREE.AudioListener | null>(null);
-  const soundRef = useRef<THREE.Audio | null>(null);
-  const loadedUrlRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (!listenerRef.current) {
-      const listener = new THREE.AudioListener();
-      camera.add(listener);
-      listenerRef.current = listener;
-    }
-
-    if (!soundRef.current && listenerRef.current) {
-      soundRef.current = new THREE.Audio(listenerRef.current);
-    }
-
-    const sound = soundRef.current;
-
-    if (sound && loadedUrlRef.current !== url) {
-      loadedUrlRef.current = url;
-      const audioLoader = new THREE.AudioLoader();
-
-      audioLoader.load(
-        url,
-        (buffer) => {
-          if (!soundRef.current) return;
-
-          sound.setBuffer(buffer);
-          sound.setLoop(true);
-          sound.setVolume(0.3);
-
-          if (!sound.isPlaying) {
-            sound.play();
-          }
-        },
-        undefined,
-        (err) => console.error("Ambience loading failed:", err),
-      );
-    }
-
-    return () => {
-      if (sound && sound.isPlaying) {
-        sound.stop();
-      }
-      if (listenerRef.current) {
-        camera.remove(listenerRef.current);
-      }
-      listenerRef.current = null;
-      soundRef.current = null;
-      loadedUrlRef.current = null;
-    };
-  }, [camera, url]);
-
-  return null;
-}
-
-const MemoizedGlobalAmbience = memo(GlobalAmbience);
 
 export default function Scene({ gameStarted }: SceneProps) {
-  const localPlayerRef = useRef<THREE.Group>(null);
+  const localPlayerRef = useRef<any>(null);
+  const loadingActive = false;
 
-  // Hook into Drei's global loading manager state
-  const { active: loadingActive } = useProgress();
+  const players = usePlayersList();
 
-  useMatchProtection({
-    enabled: gameStarted,
-  });
-
-  const glOptions = useMemo(
-    () => ({
-      antialias: false,
-      powerPreference: "high-performance" as const,
-      toneMapping: THREE.ACESFilmicToneMapping,
-      toneMappingExposure: 1.05,
-      outputColorSpace: THREE.SRGBColorSpace,
-      preserveDrawingBuffer: false,
-      stencil: false,
-      depth: true,
-      alpha: false,
-      failIfMajorPerformanceCaveat: true,
-    }),
-    [],
+  // ── 💡 RE-HOOKED: Listens reactively to the target selected by the host in CustomLobby ──
+  const [matchState, setMatchState] = useMultiplayerState(
+    "matchState",
+    "PLAYING",
   );
+  const [winTarget] = useMultiplayerState("winTarget", 20);
+  const [winnerName, setWinnerName] = useMultiplayerState("winnerName", "");
 
-  const cameraOptions = useMemo(
-    () => ({
-      position: [0, 30, 90] as [number, number, number],
-      fov: 60,
-      near: 0.8,
-      far: 220,
-    }),
-    [],
-  );
+  // Host-only match adjudicator
+  useEffect(() => {
+    if (!isHost() || matchState !== "PLAYING") return;
+
+    const interval = setInterval(() => {
+      for (const player of players) {
+        const kills = player.getState("kills") ?? 0;
+        if (kills >= winTarget) {
+          const name =
+            player.getState("customName") ??
+            player.getProfile().name ??
+            "Unknown Player";
+          setWinnerName(name);
+          setMatchState("ENDED");
+          break;
+        }
+      }
+    }, 500);
+
+    return () => clearInterval(interval);
+  }, [players, matchState, winTarget, setMatchState, setWinnerName]);
 
   return (
-    <div className="w-full h-full select-none overflow-hidden bg-zinc-950 relative">
-      
+    <div className="w-full h-full min-h-screen overflow-hidden bg-zinc-950 relative">
       <div
         className={`w-full h-full transition-opacity duration-500 ${
           loadingActive ? "opacity-0 pointer-events-none" : "opacity-100"
@@ -151,15 +104,13 @@ export default function Scene({ gameStarted }: SceneProps) {
             gl={glOptions}
             camera={cameraOptions}
             dpr={[0.5, 0.85]}
-            frameloop={gameStarted ? "always" : "demand"}
+            frameloop={
+              gameStarted && matchState === "PLAYING" ? "always" : "demand"
+            }
             performance={{ min: 0.5 }}
           >
             <Suspense fallback={null}>
               <Environment />
-
-              {gameStarted && (
-                <MemoizedGlobalAmbience url="/sounds/utils/Ambience.mp3" />
-              )}
 
               <Physics
                 gravity={[0, -9.81, 0]}
@@ -170,23 +121,33 @@ export default function Scene({ gameStarted }: SceneProps) {
                 <BorderWalls />
                 <Trees />
 
-                <PlayerManager active={gameStarted} />
-                <WeaponSpawner active={gameStarted} />
+                {matchState === "PLAYING" && (
+                  <>
+                    <PlayerManager active={gameStarted} />
+                    <WeaponSpawner active={gameStarted} />
+                  </>
+                )}
+
                 <BulletSystem />
               </Physics>
             </Suspense>
           </Canvas>
-          <Crosshair />
 
-          {gameStarted && <MemoizedPerformanceStats />}
-          {gameStarted && <MemoizedLeaderboard />}
+          {matchState === "PLAYING" && <Crosshair />}
+
+          {gameStarted && matchState === "PLAYING" && (
+            <MemoizedPerformanceStats />
+          )}
+          {gameStarted && matchState === "PLAYING" && <MemoizedLeaderboard />}
         </KeyboardControls>
 
-        {gameStarted && <MemoizedActivityLog />}
-        {gameStarted && <MemoizedControlsUI />}
+        {gameStarted && matchState === "PLAYING" && <MemoizedActivityLog />}
+        {gameStarted && matchState === "PLAYING" && <MemoizedControlsUI />}
       </div>
 
-     
+      {/* GAME OVER CARD DISPLAY */}
+      {matchState === "ENDED" && <GameOverOverlay winnerName={winnerName} />}
+
       <Loader />
     </div>
   );
