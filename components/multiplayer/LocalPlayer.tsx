@@ -21,7 +21,7 @@ import {
 import { useKeyboardControls } from "@react-three/drei";
 import { useFrame, useThree } from "@react-three/fiber";
 import { CapsuleCollider, RigidBody } from "@react-three/rapier";
-import { myPlayer, usePlayerState, usePlayersList } from "playroomkit";
+import { myPlayer, usePlayerState } from "playroomkit";
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import PlayerBody from "./shared/PlayerBody";
@@ -33,13 +33,13 @@ const CAM_DIST_ADS = CAM_DIST * 0.6;
 
 export default function LocalPlayer() {
   const player = myPlayer();
-  const players = usePlayersList();
+  // const players = usePlayersList();
 
   const rbRef = useRef<any>(null);
   const meshGroupRef = useRef<THREE.Group>(null);
   const lastNetSync = useRef(0);
 
-  const { gl } = useThree(); // camera removed from here
+  const { gl } = useThree();
   const [, getKeys] = useKeyboardControls<Controls>();
 
   const yaw = useRef(Math.PI);
@@ -61,15 +61,10 @@ export default function LocalPlayer() {
     () => COLORS[Math.floor(Math.random() * COLORS.length)],
   );
 
+  // ── Updated Random Spawn Position Logic ───────────────────────
   const [spawnPosition] = useState<[number, number, number]>(() => {
-    const me = player?.id;
-    const ordered = [...players].sort((a, b) => a.id.localeCompare(b.id));
-    const myIndex = me ? ordered.findIndex((p) => p.id === me) : -1;
-    if (myIndex >= 0) return SPAWN_POSITIONS[myIndex % SPAWN_POSITIONS.length];
-    const fallback = me
-      ? Array.from(me).reduce((sum, ch) => sum + ch.charCodeAt(0), 0)
-      : 0;
-    return SPAWN_POSITIONS[fallback % SPAWN_POSITIONS.length];
+    const randomIndex = Math.floor(Math.random() * SPAWN_POSITIONS.length);
+    return SPAWN_POSITIONS[randomIndex];
   });
 
   // ── Pointer Lock ───────────────────────────────────────────────
@@ -244,7 +239,6 @@ export default function LocalPlayer() {
 
   const displayName = customName ?? player.getProfile().name ?? "Player";
 
-  // ... around line 231 inside return statement:
   return (
     <RigidBody
       ref={rbRef}
@@ -260,8 +254,8 @@ export default function LocalPlayer() {
       <PlayerBody
         ref={meshGroupRef}
         color={color}
-        playerId={player.id} 
-        displayName={displayName} 
+        playerId={player.id}
+        displayName={displayName}
         health={health}
         weapon={weapon}
         isLocal
@@ -273,3 +267,4 @@ export default function LocalPlayer() {
     </RigidBody>
   );
 }
+

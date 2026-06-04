@@ -1,11 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { motion } from "framer-motion";
 import { Card } from "@/components/ui/card";
+import { motion } from "framer-motion";
 import { myPlayer, usePlayersList, usePlayerState } from "playroomkit";
 
-// 💡 FIX: Dedicated row component so usePlayerState can hook into each player individually
+// Dedicated row component so usePlayerState can hook into each player individually
 function LeaderboardRow({
   player,
   index,
@@ -15,13 +15,17 @@ function LeaderboardRow({
   index: number;
   isYou: boolean;
 }) {
-  
   const [kills] = usePlayerState(player, "kills", 0);
   const [health] = usePlayerState(player, "health", 100);
+  // ── Hooking into customName state ──────────────────────────────
+  const [customName] = usePlayerState(player, "customName", null);
 
   const profile = player.getProfile();
   const isDead = health <= 0;
   const isFirst = index === 0;
+
+  // Use customName first, fallback to profile name, and finally "Player"
+  const displayName = customName ?? profile.name ?? "Player";
 
   return (
     <div
@@ -40,7 +44,7 @@ function LeaderboardRow({
           color: isFirst ? "#ffe08a" : isDead ? "#ffffff30" : "#ffffffc0",
         }}
       >
-        {profile.name ?? "Player"}
+        {displayName}
       </span>
 
       {/* YOU / DEAD tag */}
