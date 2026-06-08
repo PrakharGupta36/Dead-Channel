@@ -10,7 +10,7 @@ interface PlayerManagerProps {
 }
 
 export default function PlayerManager({ active }: PlayerManagerProps) {
-  // Triggers re-render ONLY when players join or leave the room instance
+
   const players = usePlayersList(true);
   const currentPlayer = myPlayer();
 

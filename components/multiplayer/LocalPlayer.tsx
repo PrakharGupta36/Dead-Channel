@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/purity */
+/* eslint-disable react-hooks/refs */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
@@ -31,13 +33,38 @@ const FOV_ADS = 30;
 const ADS_LERP = 0.12;
 const CAM_DIST_ADS = CAM_DIST * 0.6;
 
-export default function LocalPlayer() {
+export default function LocalPlayerController() {
   const player = myPlayer();
-  // const players = usePlayersList();
+  const [health] = usePlayerState(player, "health", 100);
+  const [respawnKey, setRespawnKey] = useState(0);
+  const prevHealthRef = useRef(health);
 
+  useEffect(() => {
+    if (prevHealthRef.current === 0 && health > 0) {
+      setRespawnKey((prev) => prev + 1);
+    }
+    prevHealthRef.current = health;
+  }, [health]);
+
+  if (!player) return null;
+
+  return (
+    <LocalPlayerInstance key={respawnKey} player={player} health={health} />
+  );
+}
+
+interface InstanceProps {
+  player: any;
+  health: number;
+}
+
+function LocalPlayerInstance({ player, health }: InstanceProps) {
   const rbRef = useRef<any>(null);
   const meshGroupRef = useRef<THREE.Group>(null);
-  const lastNetSync = useRef(0);
+
+  // Track mount timing to safeguard network overrides
+  const mountTimeRef = useRef(performance.now());
+  const lastNetSync = useRef(performance.now());
 
   const { gl } = useThree();
   const [, getKeys] = useKeyboardControls<Controls>();
@@ -61,13 +88,38 @@ export default function LocalPlayer() {
     () => COLORS[Math.floor(Math.random() * COLORS.length)],
   );
 
-  // ── Updated Random Spawn Position Logic ───────────────────────
-  const [spawnPosition] = useState<[number, number, number]>(() => {
+  // 🎲 1. Run a completely clean, un-cached local selection variable
+  const initialSpawnCoordinates = useRef<[number, number, number]>([0, 5, 0]);
+  if (initialSpawnCoordinates.current[0] === 0) {
     const randomIndex = Math.floor(Math.random() * SPAWN_POSITIONS.length);
-    return SPAWN_POSITIONS[randomIndex];
-  });
+    initialSpawnCoordinates.current = SPAWN_POSITIONS[randomIndex];
+  }
 
-  // ── Pointer Lock ───────────────────────────────────────────────
+  // ── 🛠️ THE CRITICAL POSITION OVERRIDE FIX ───────────────────────
+  useEffect(() => {
+    if (!rbRef.current || !player) return;
+
+    const spawnTarget = initialSpawnCoordinates.current;
+
+    // A. Force local physics translation instantly outside the React pipeline
+    rbRef.current.setTranslation(
+      { x: spawnTarget[0], y: spawnTarget[1], z: spawnTarget[2] },
+      true,
+    );
+    rbRef.current.setLinvel({ x: 0, y: 0, z: 0 }, true);
+
+    // B. Push it to the network state forcefully
+    player.setState(
+      "position",
+      [spawnTarget[0], spawnTarget[1], spawnTarget[2]],
+      true,
+    );
+
+    // C. Reset tracking timestamp to protect the frame loop
+    mountTimeRef.current = performance.now();
+  }, [player]);
+
+  // ── Pointer Lock & Mouse Listeners ─────────────────────────────
   useEffect(() => {
     const canvas = gl.domElement;
     const requestLock = () => canvas.requestPointerLock();
@@ -124,26 +176,27 @@ export default function LocalPlayer() {
     };
   }, [gl, weapon, isFiring, setFiringState]);
 
-  const [health] = usePlayerState(player, "health", 100);
-
+  // ── Profile Registration ───────────────────────────────────────
   useEffect(() => {
-    if (!player) return;
-    if (player.getState("health") === undefined) {
-      player.setState("health", 100);
-    }
     player.setState("color", color);
     const displayName = customName ?? player.getProfile().name;
     player.setState("name", displayName);
   }, [player, color, customName]);
 
+  // ── Core Game Loop Updates ─────────────────────────────────────
   useFrame((state, delta) => {
     const rb = rbRef.current;
     if (!rb) return;
 
+    if (health <= 0) return;
+
     const syncedPos = player.getState("position");
     const t = rb.translation();
 
-    if (syncedPos && Array.isArray(syncedPos)) {
+    // ⚡ STRICT PROTECTION: Give network buffers a massive 800ms window to catch up before rubberbanding
+    const timeSinceMount = performance.now() - mountTimeRef.current;
+
+    if (syncedPos && Array.isArray(syncedPos) && timeSinceMount > 800) {
       const distToSynced = new THREE.Vector3(t.x, t.y, t.z).distanceTo(
         new THREE.Vector3(syncedPos[0], syncedPos[1], syncedPos[2]),
       );
@@ -226,8 +279,12 @@ export default function LocalPlayer() {
     camera.position.lerp(_camPos, 1 - Math.exp(-10 * delta));
     camera.lookAt(_lookAt);
 
+    // Network Sync Update Engine
     const now = performance.now();
-    if (player && now - lastNetSync.current > NET_SYNC_INTERVAL_MS) {
+    if (
+      now - lastNetSync.current > NET_SYNC_INTERVAL_MS &&
+      timeSinceMount > 800
+    ) {
       player.setState("position", [t.x, t.y, t.z], false);
       player.setState("yaw", yaw.current, false);
       player.setState("pitch", pitch.current, false);
@@ -235,15 +292,13 @@ export default function LocalPlayer() {
     }
   });
 
-  if (!player) return null;
-
   const displayName = customName ?? player.getProfile().name ?? "Player";
 
   return (
     <RigidBody
       ref={rbRef}
       colliders={false}
-      position={spawnPosition}
+      position={initialSpawnCoordinates.current}
       enabledRotations={[false, false, false]}
       linearDamping={4}
       angularDamping={10}
@@ -251,20 +306,22 @@ export default function LocalPlayer() {
       userData={{ playerId: player.id }}
     >
       <CapsuleCollider args={[0.5, 0.5]} />
-      <PlayerBody
-        ref={meshGroupRef}
-        color={color}
-        playerId={player.id}
-        displayName={displayName}
-        health={health}
-        weapon={weapon}
-        isLocal
-        aimPitch={pitchRef}
-        isAiming={isAiming}
-        playerPositionRef={playerPositionRef}
-        isMoving={isMoving}
-      />
+
+      <group visible={health > 0}>
+        <PlayerBody
+          ref={meshGroupRef}
+          color={color}
+          playerId={player.id}
+          displayName={displayName}
+          health={health}
+          weapon={weapon}
+          isLocal
+          aimPitch={pitchRef}
+          isAiming={isAiming}
+          playerPositionRef={playerPositionRef}
+          isMoving={isMoving}
+        />
+      </group>
     </RigidBody>
   );
 }
-

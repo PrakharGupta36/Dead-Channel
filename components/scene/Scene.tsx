@@ -21,6 +21,7 @@ import Crosshair from "../game-ui/hud/CrossHair";
 import Leaderboard from "../game-ui/hud/Leaderboard";
 import BulletSystem from "../weapons/Bullet-System";
 
+import { useMatchProtection } from "@/hooks/useMatchProtection";
 import { isHost, useMultiplayerState, usePlayersList } from "playroomkit";
 import ActivityLog from "../game-ui/hud/Activity-Log";
 import GameOverOverlay from "../game-ui/hud/GameOverOverlay";
@@ -34,19 +35,22 @@ const KEYBOARD_MAP = [
   { name: Controls.backward, keys: ["KeyS", "ArrowDown"] },
   { name: Controls.leftward, keys: ["KeyA", "ArrowLeft"] },
   { name: Controls.rightward, keys: ["KeyD", "ArrowRight"] },
+  { name: Controls.run, keys: ["Shift"] },
   { name: Controls.jump, keys: ["Space"] },
-  // { name: Controls.shoot, keys: ["MouseButton0"] },
-  // { name: Controls.aim, keys: ["MouseButton2", "KeyI"] },
 ];
 
+// ⚡ PERFORMANCE OPTIMIZATION: Aggressive WebGL settings for low-end devices
 const glOptions = {
-  antialias: true,
+  antialias: false, // Turn off MSAA (huge GPU saver on mobile/integrated GPUs)
   powerPreference: "high-performance" as const,
+  precision: "mediump" as const, // Lower shader precision for older mobile/integrated chips
+  failIfMajorPerformanceCaveat: false,
 };
+
 const cameraOptions = {
   fov: 45,
   near: 0.1,
-  far: 100,
+  far: 80, // Reduced from 100 to lower frustum culling load
   position: [0, 5, 10] as [number, number, number],
 };
 
@@ -61,7 +65,6 @@ export default function Scene({ gameStarted }: SceneProps) {
 
   const players = usePlayersList();
 
-  // ── 💡 RE-HOOKED: Listens reactively to the target selected by the host in CustomLobby ──
   const [matchState, setMatchState] = useMultiplayerState(
     "matchState",
     "PLAYING",
@@ -91,6 +94,9 @@ export default function Scene({ gameStarted }: SceneProps) {
     return () => clearInterval(interval);
   }, [players, matchState, winTarget, setMatchState, setWinnerName]);
 
+  // Reload Protection
+  useMatchProtection({ enabled: true });
+
   return (
     <div className="w-full h-full min-h-screen overflow-hidden bg-zinc-950 relative">
       <div
@@ -103,19 +109,22 @@ export default function Scene({ gameStarted }: SceneProps) {
             shadows={false}
             gl={glOptions}
             camera={cameraOptions}
-            dpr={[0.5, 0.85]}
+            dpr={[0.75, 1]}
             frameloop={
               gameStarted && matchState === "PLAYING" ? "always" : "demand"
             }
-            performance={{ min: 0.5 }}
+            // ⚡ PERFORMANCE DEGRADATION: Allows Three.js to drop quality dynamically if FPS chokes
+            performance={{ min: 0.5, max: 1, debounce: 200 }}
           >
             <Suspense fallback={null}>
               <Environment />
 
+              {/* ⚡ FIXED 60FPS PHYSICS: Uses a fixed frame rate loop decoupled from render rate */}
               <Physics
                 gravity={[0, -9.81, 0]}
                 colliders={false}
                 timeStep={1 / 60}
+                maxCcdSubsteps={1}
               >
                 <Ground size={300} playerRef={localPlayerRef} />
                 <BorderWalls />

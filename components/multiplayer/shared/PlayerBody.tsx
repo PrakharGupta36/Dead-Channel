@@ -11,8 +11,8 @@ import * as THREE from "three";
 
 interface PlayerBodyProps {
   color: string;
-  playerId: string; // 💡 Now strictly maps to Playroom's internal player.id
-  displayName: string; // 💡 NEW: Explicitly pass the display name for UI
+  playerId: string;
+  displayName: string;
   health: number;
   weapon: GunType | null;
   isLocal?: boolean;
@@ -30,7 +30,7 @@ const PlayerBody = forwardRef<THREE.Group, PlayerBodyProps>(
     {
       color,
       playerId,
-      displayName, // Destructure the new prop
+      displayName,
       health,
       weapon,
       isLocal = false,
@@ -64,19 +64,38 @@ const PlayerBody = forwardRef<THREE.Group, PlayerBodyProps>(
       enabled: isLocal && !!weapon,
     });
 
+    // ── 🛠️ AUDIO HOOK REPAIR: Safety guards added to prevent audio crashes during instant component mounts ──
     useEffect(() => {
-      if (!audioRef.current) return;
+      const sound = audioRef.current;
+      if (!sound) return;
 
-      if (isMoving) {
-        if (!audioRef.current.isPlaying) {
-          audioRef.current.play();
+      // Wrap in a safe checker loop to handle unmount/remount delays
+      const handleAudioState = () => {
+        // Stop execution if the ThreeJS source buffer has not resolved yet
+        if (!sound.buffer) return;
+
+        if (isMoving) {
+          if (!sound.isPlaying) {
+            sound.play();
+          }
+        } else {
+          if (sound.isPlaying) {
+            sound.pause();
+          }
         }
-      } else {
-        if (audioRef.current.isPlaying) {
-          audioRef.current.pause();
-        }
-      }
+      };
+
+      handleAudioState();
     }, [isMoving]);
+
+    // Safety fallback: ensure audio stops if this specific instance unmounts during death
+    useEffect(() => {
+      return () => {
+        if (audioRef.current && audioRef.current.isPlaying) {
+          audioRef.current.stop();
+        }
+      };
+    }, []);
 
     useEffect(() => {
       if (weaponRef.current && weapon) {
@@ -92,7 +111,7 @@ const PlayerBody = forwardRef<THREE.Group, PlayerBodyProps>(
             (ref as React.MutableRefObject<THREE.Group | null>).current = node;
         }}
         position={[0, -0.5, 0]}
-        userData={{ playerId }} // 💡 Now safely keeps a stable ID for bullet hits
+        userData={{ playerId }}
       >
         <PositionalAudio
           ref={audioRef}
@@ -105,7 +124,7 @@ const PlayerBody = forwardRef<THREE.Group, PlayerBodyProps>(
 
         <mesh castShadow position={[0, 0.5, 0]} userData={{ playerId }}>
           <capsuleGeometry args={[0.5, 1]} />
-          <meshStandardMaterial color={color} />
+          <meshStandardMaterial color={color} roughness={0.4} metalness={0.1} />
         </mesh>
 
         <group visible={!!weapon}>
@@ -120,7 +139,6 @@ const PlayerBody = forwardRef<THREE.Group, PlayerBodyProps>(
 
         <Html position={[0, 2.5, 0]} center distanceFactor={10} occlude>
           <div className="pointer-events-none relative top-8 select-none">
-            {/* NAME PLATE */}
             <div className="mb-2 flex justify-center">
               <div className="relative overflow-hidden">
                 <div className="relative flex items-center gap-2">
@@ -132,16 +150,15 @@ const PlayerBody = forwardRef<THREE.Group, PlayerBodyProps>(
                     }}
                   />
                   <span
-                    className="font-mono text-[12px] font-semibold uppercase tracking-[0.18em] text-white/88"
+                    className="font-mono font-semibold uppercase tracking-[0.18em] text-white/88"
                     style={{ fontSize: ".5rem" }}
                   >
-                    {displayName} {/* 💡 UI correctly displays profile names */}
+                    {displayName}
                   </span>
                 </div>
               </div>
             </div>
 
-            {/* HEALTH BAR */}
             <div
               className="relative h-2 w-40 overflow-hidden rounded-full border border-white/[0.05] bg-gradient-to-b from-[#151515] to-[#0a0a0a] p-[2px] shadow-[0_1px_0_#ffffff15,0_2px_8px_#000000aa_inset]"
               style={{ marginTop: "8px" }}
