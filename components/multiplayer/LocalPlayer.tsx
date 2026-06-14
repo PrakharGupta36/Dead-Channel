@@ -33,6 +33,42 @@ const FOV_ADS = 30;
 const ADS_LERP = 0.12;
 const CAM_DIST_ADS = CAM_DIST * 0.6;
 
+// ── Spawn slot tracking: shared across all local instances in this tab ────────
+// Keeps a set of recently-claimed spawn indices so respawns don't stack.
+// Slots are released after 8 s so they can be reused in large matches.
+const _claimedSlots = new Map<number, number>(); // slotIndex → claimedAt ms
+
+function claimSpawnSlot(): [number, number, number] {
+  const now = performance.now();
+
+  // Release slots older than 8 s
+  for (const [idx, claimedAt] of _claimedSlots) {
+    if (now - claimedAt > 8_000) _claimedSlots.delete(idx);
+  }
+
+  // Build a shuffled list of all slot indices
+  const indices = Array.from({ length: SPAWN_POSITIONS.length }, (_, i) => i);
+  for (let i = indices.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [indices[i], indices[j]] = [indices[j], indices[i]];
+  }
+
+  // Pick the first unclaimed slot; fall back to any random slot
+  let chosen = indices[0];
+  for (const idx of indices) {
+    if (!_claimedSlots.has(idx)) {
+      chosen = idx;
+      break;
+    }
+  }
+
+  _claimedSlots.set(chosen, now);
+  return SPAWN_POSITIONS[chosen] as [number, number, number];
+}
+
+// ── Pre-allocated scratch vectors to eliminate per-frame heap allocation ──────
+const _lookAtTarget = new THREE.Vector3();
+
 export default function LocalPlayerController() {
   const player = myPlayer();
   const [health] = usePlayerState(player, "health", 100);
@@ -40,16 +76,20 @@ export default function LocalPlayerController() {
   const prevHealthRef = useRef(health);
 
   useEffect(() => {
-    if (prevHealthRef.current === 0 && health > 0) {
+    if (prevHealthRef.current === 0 && (health as number) > 0) {
       setRespawnKey((prev) => prev + 1);
     }
-    prevHealthRef.current = health;
+    prevHealthRef.current = health as number;
   }, [health]);
 
   if (!player) return null;
 
   return (
-    <LocalPlayerInstance key={respawnKey} player={player} health={health} />
+    <LocalPlayerInstance
+      key={respawnKey}
+      player={player}
+      health={health as number}
+    />
   );
 }
 
@@ -62,7 +102,6 @@ function LocalPlayerInstance({ player, health }: InstanceProps) {
   const rbRef = useRef<any>(null);
   const meshGroupRef = useRef<THREE.Group>(null);
 
-  // Track mount timing to safeguard network overrides
   const mountTimeRef = useRef(performance.now());
   const lastNetSync = useRef(performance.now());
 
@@ -78,48 +117,64 @@ function LocalPlayerInstance({ player, health }: InstanceProps) {
   const pitchRef = useRef(0.3);
 
   const playerPositionRef = useRef(new THREE.Vector3());
+
+  // ── isMoving: driven by a ref in useFrame; only setState when it flips ───
+  const isMovingRef = useRef(false);
   const [isMoving, setIsMoving] = useState(false);
 
   const [weapon] = usePlayerState(player, "weapon", null);
   const [customName] = usePlayerState(player, "customName", null);
   const [isFiring, setFiringState] = usePlayerState(player, "firing", false);
 
+  // ── Spawn shield: 5-second invincibility window ───────────────────────────
+  const [, setSpawnShield] = usePlayerState(player, "spawnShield", false);
+  const shieldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const [color] = useState(
     () => COLORS[Math.floor(Math.random() * COLORS.length)],
   );
 
-  // 🎲 1. Run a completely clean, un-cached local selection variable
-  const initialSpawnCoordinates = useRef<[number, number, number]>([0, 5, 0]);
-  if (initialSpawnCoordinates.current[0] === 0) {
-    const randomIndex = Math.floor(Math.random() * SPAWN_POSITIONS.length);
-    initialSpawnCoordinates.current = SPAWN_POSITIONS[randomIndex];
+  // 🎲 Claim a unique spawn slot once per instance lifetime
+  const initialSpawnCoordinates = useRef<[number, number, number] | null>(null);
+  if (initialSpawnCoordinates.current === null) {
+    initialSpawnCoordinates.current = claimSpawnSlot();
   }
 
-  // ── 🛠️ THE CRITICAL POSITION OVERRIDE FIX ───────────────────────
+  // ── Force physics to the claimed spawn position on mount ─────────────────
   useEffect(() => {
     if (!rbRef.current || !player) return;
 
-    const spawnTarget = initialSpawnCoordinates.current;
+    const spawnTarget = initialSpawnCoordinates.current!;
 
-    // A. Force local physics translation instantly outside the React pipeline
     rbRef.current.setTranslation(
       { x: spawnTarget[0], y: spawnTarget[1], z: spawnTarget[2] },
       true,
     );
     rbRef.current.setLinvel({ x: 0, y: 0, z: 0 }, true);
 
-    // B. Push it to the network state forcefully
     player.setState(
       "position",
       [spawnTarget[0], spawnTarget[1], spawnTarget[2]],
       true,
     );
 
-    // C. Reset tracking timestamp to protect the frame loop
     mountTimeRef.current = performance.now();
+
+    // ── Activate spawn shield ─────────────────────────────────────────────
+    setSpawnShield(true);
+    if (shieldTimerRef.current) clearTimeout(shieldTimerRef.current);
+    shieldTimerRef.current = setTimeout(() => {
+      setSpawnShield(false);
+      shieldTimerRef.current = null;
+    }, 5_000);
+
+    return () => {
+      if (shieldTimerRef.current) clearTimeout(shieldTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [player]);
 
-  // ── Pointer Lock & Mouse Listeners ─────────────────────────────
+  // ── Pointer Lock & Mouse Listeners ───────────────────────────────────────
   useEffect(() => {
     const canvas = gl.domElement;
     const requestLock = () => canvas.requestPointerLock();
@@ -176,14 +231,14 @@ function LocalPlayerInstance({ player, health }: InstanceProps) {
     };
   }, [gl, weapon, isFiring, setFiringState]);
 
-  // ── Profile Registration ───────────────────────────────────────
+  // ── Profile Registration ──────────────────────────────────────────────────
   useEffect(() => {
     player.setState("color", color);
     const displayName = customName ?? player.getProfile().name;
     player.setState("name", displayName);
   }, [player, color, customName]);
 
-  // ── Core Game Loop Updates ─────────────────────────────────────
+  // ── Core Game Loop ────────────────────────────────────────────────────────
   useFrame((state, delta) => {
     const rb = rbRef.current;
     if (!rb) return;
@@ -193,15 +248,16 @@ function LocalPlayerInstance({ player, health }: InstanceProps) {
     const syncedPos = player.getState("position");
     const t = rb.translation();
 
-    // ⚡ STRICT PROTECTION: Give network buffers a massive 800ms window to catch up before rubberbanding
     const timeSinceMount = performance.now() - mountTimeRef.current;
 
     if (syncedPos && Array.isArray(syncedPos) && timeSinceMount > 800) {
-      const distToSynced = new THREE.Vector3(t.x, t.y, t.z).distanceTo(
-        new THREE.Vector3(syncedPos[0], syncedPos[1], syncedPos[2]),
-      );
+      const dx = t.x - syncedPos[0];
+      const dy = t.y - syncedPos[1];
+      const dz = t.z - syncedPos[2];
+      const distSq = dx * dx + dy * dy + dz * dz;
 
-      if (distToSynced > 4.0) {
+      if (distSq > 16) {
+        // 4.0² — avoids sqrt
         rb.setTranslation(
           { x: syncedPos[0], y: syncedPos[1], z: syncedPos[2] },
           true,
@@ -237,7 +293,12 @@ function LocalPlayerInstance({ player, health }: InstanceProps) {
     const hasInput = forward || backward || leftward || rightward;
     const isGrounded = Math.abs(vel.y) < 0.05;
     const movingNow = hasInput && isGrounded;
-    if (isMoving !== movingNow) setIsMoving(movingNow);
+
+    // Only trigger React re-render when state actually flips
+    if (movingNow !== isMovingRef.current) {
+      isMovingRef.current = movingNow;
+      setIsMoving(movingNow);
+    }
 
     if (meshGroupRef.current) {
       const targetYaw = yaw.current + Math.PI;
@@ -267,10 +328,10 @@ function LocalPlayerInstance({ player, health }: InstanceProps) {
     camera.fov = currentFov.current;
     camera.updateProjectionMatrix();
 
-    _lookAt.lerp(
-      new THREE.Vector3(t.x, t.y + CAM_HEIGHT, t.z),
-      1 - Math.exp(-12 * delta),
-    );
+    // ── Reuse pre-allocated scratch vector; no `new THREE.Vector3()` per frame
+    _lookAtTarget.set(t.x, t.y + CAM_HEIGHT, t.z);
+    _lookAt.lerp(_lookAtTarget, 1 - Math.exp(-12 * delta));
+
     _camPos.set(
       t.x - Math.sin(yaw.current) * Math.cos(pitch.current) * targetDist,
       t.y + Math.sin(pitch.current) * targetDist + CAM_HEIGHT,
@@ -279,7 +340,7 @@ function LocalPlayerInstance({ player, health }: InstanceProps) {
     camera.position.lerp(_camPos, 1 - Math.exp(-10 * delta));
     camera.lookAt(_lookAt);
 
-    // Network Sync Update Engine
+    // Network sync
     const now = performance.now();
     if (
       now - lastNetSync.current > NET_SYNC_INTERVAL_MS &&
