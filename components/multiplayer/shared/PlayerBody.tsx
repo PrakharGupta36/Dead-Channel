@@ -6,7 +6,8 @@ import EquippedWeapon, {
 import { useFiring } from "@/hooks/useFiring";
 import { GunType } from "@/store/useGameStore";
 import { Html, PositionalAudio } from "@react-three/drei";
-import { forwardRef, useEffect, useRef } from "react";
+import { useFrame } from "@react-three/fiber";
+import { forwardRef, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 
 interface PlayerBodyProps {
@@ -21,9 +22,15 @@ interface PlayerBodyProps {
   otherPlayerMeshes?: React.RefObject<Record<string, THREE.Object3D>>;
   playerPositionRef?: React.RefObject<THREE.Vector3>;
   isMoving?: boolean;
+  // New: spawn shield from network state
+  spawnShield?: boolean;
 }
 
 const _fallbackPos = new THREE.Vector3();
+
+// ── Shield pulse material (reused across renders) ─────────────────────────────
+// We drive opacity via a ref in useFrame to avoid per-frame React state updates.
+const SHIELD_COLOR = new THREE.Color(0x38bdf8); // sky-400
 
 const PlayerBody = forwardRef<THREE.Group, PlayerBodyProps>(
   (
@@ -39,22 +46,87 @@ const PlayerBody = forwardRef<THREE.Group, PlayerBodyProps>(
       otherPlayerMeshes,
       playerPositionRef,
       isMoving = false,
+      spawnShield = false,
     },
     ref,
   ) => {
     const weaponRef = useRef<EquippedWeaponHandle>(null);
     const fallbackPosRef = useRef<THREE.Vector3>(_fallbackPos);
     const audioRef = useRef<THREE.PositionalAudio>(null);
+    const shieldMeshRef = useRef<THREE.Mesh>(null);
+    const shieldMatRef = useRef<THREE.MeshStandardMaterial>(null);
 
     const clampedHealth = Math.max(0, Math.min(100, health));
     const prevHealthRef = useRef(clampedHealth);
 
+    // ── Respawn detection ─────────────────────────────────────────────────────
     const isRespawn =
       clampedHealth > prevHealthRef.current && prevHealthRef.current === 0;
+
+    // ── Death/respawn body visibility: fade out on death, snap in on respawn ──
+    const [bodyVisible, setBodyVisible] = useState(clampedHealth > 0);
+    const bodyOpacityRef = useRef(clampedHealth > 0 ? 1 : 0);
+    const bodyMeshRef = useRef<THREE.Mesh>(null);
+    const bodyMatRef = useRef<THREE.MeshStandardMaterial>(null);
 
     useEffect(() => {
       prevHealthRef.current = clampedHealth;
     }, [clampedHealth]);
+
+    // When health reaches 0 start a fade-out; on respawn snap immediately visible
+    useEffect(() => {
+      if (clampedHealth <= 0) {
+        // Start fade — handled in useFrame below
+      } else if (isRespawn) {
+        // Instant snap on respawn: no fade-in flash
+        bodyOpacityRef.current = 1;
+        setBodyVisible(true);
+        if (bodyMatRef.current) {
+          bodyMatRef.current.opacity = 1;
+          bodyMatRef.current.transparent = false;
+          bodyMatRef.current.needsUpdate = true;
+        }
+      } else {
+        setBodyVisible(true);
+        bodyOpacityRef.current = 1;
+      }
+    }, [clampedHealth, isRespawn]);
+
+    // ── Shield pulse + body fade in useFrame (zero React state overhead) ──────
+    const shieldTimeRef = useRef(0);
+    useFrame((_, delta) => {
+      // ── Death fade-out ──────────────────────────────────────────────────────
+      if (clampedHealth <= 0 && bodyOpacityRef.current > 0) {
+        bodyOpacityRef.current = Math.max(
+          0,
+          bodyOpacityRef.current - delta * 3,
+        );
+        if (bodyMatRef.current) {
+          bodyMatRef.current.transparent = true;
+          bodyMatRef.current.opacity = bodyOpacityRef.current;
+          bodyMatRef.current.needsUpdate = true;
+        }
+        if (bodyOpacityRef.current <= 0) setBodyVisible(false);
+      }
+
+      // ── Shield pulse ────────────────────────────────────────────────────────
+      if (!shieldMeshRef.current || !shieldMatRef.current) return;
+
+      if (spawnShield) {
+        shieldTimeRef.current += delta;
+        const pulse = 0.25 + 0.15 * Math.sin(shieldTimeRef.current * 6);
+        shieldMatRef.current.opacity = pulse;
+        shieldMeshRef.current.visible = true;
+
+        // Slow spin
+        shieldMeshRef.current.rotation.y += delta * 1.2;
+        shieldMeshRef.current.rotation.x += delta * 0.4;
+      } else {
+        shieldTimeRef.current = 0;
+        shieldMeshRef.current.visible = false;
+        shieldMatRef.current.opacity = 0;
+      }
+    });
 
     useFiring({
       weapon: isLocal ? weapon : null,
@@ -64,36 +136,22 @@ const PlayerBody = forwardRef<THREE.Group, PlayerBodyProps>(
       enabled: isLocal && !!weapon,
     });
 
-    // ── 🛠️ AUDIO HOOK REPAIR: Safety guards added to prevent audio crashes during instant component mounts ──
+    // ── Audio: walking sound ──────────────────────────────────────────────────
     useEffect(() => {
       const sound = audioRef.current;
       if (!sound) return;
+      if (!sound.buffer) return;
 
-      // Wrap in a safe checker loop to handle unmount/remount delays
-      const handleAudioState = () => {
-        // Stop execution if the ThreeJS source buffer has not resolved yet
-        if (!sound.buffer) return;
-
-        if (isMoving) {
-          if (!sound.isPlaying) {
-            sound.play();
-          }
-        } else {
-          if (sound.isPlaying) {
-            sound.pause();
-          }
-        }
-      };
-
-      handleAudioState();
+      if (isMoving) {
+        if (!sound.isPlaying) sound.play();
+      } else {
+        if (sound.isPlaying) sound.pause();
+      }
     }, [isMoving]);
 
-    // Safety fallback: ensure audio stops if this specific instance unmounts during death
     useEffect(() => {
       return () => {
-        if (audioRef.current && audioRef.current.isPlaying) {
-          audioRef.current.stop();
-        }
+        if (audioRef.current?.isPlaying) audioRef.current.stop();
       };
     }, []);
 
@@ -122,11 +180,47 @@ const PlayerBody = forwardRef<THREE.Group, PlayerBodyProps>(
           autoplay={false}
         />
 
-        <mesh castShadow position={[0, 0.5, 0]} userData={{ playerId }}>
+        {/* ── Player capsule body ──────────────────────────────────────────── */}
+        <mesh
+          ref={bodyMeshRef}
+          castShadow
+          position={[0, 0.5, 0]}
+          userData={{ playerId }}
+          visible={bodyVisible}
+        >
           <capsuleGeometry args={[0.5, 1]} />
-          <meshStandardMaterial color={color} roughness={0.4} metalness={0.1} />
+          <meshStandardMaterial
+            ref={bodyMatRef}
+            color={color}
+            roughness={0.4}
+            metalness={0.1}
+            transparent={false}
+            opacity={1}
+          />
         </mesh>
 
+        {/* ── Spawn-shield dome ────────────────────────────────────────────── */}
+        {/*
+          Slightly larger than the capsule, icosahedron for a crystalline look.
+          Rendered only when spawnShield is ever true for this player.
+          Visibility is toggled in useFrame to avoid React re-renders.
+        */}
+        <mesh ref={shieldMeshRef} position={[0, 0.5, 0]} visible={spawnShield}>
+          <icosahedronGeometry args={[1.05, 1]} />
+          <meshStandardMaterial
+            ref={shieldMatRef}
+            color={SHIELD_COLOR}
+            transparent
+            opacity={0.3}
+            emissive={SHIELD_COLOR}
+            emissiveIntensity={0.6}
+            wireframe={false}
+            depthWrite={false}
+            side={THREE.FrontSide}
+          />
+        </mesh>
+
+        {/* ── Weapon ──────────────────────────────────────────────────────── */}
         <group visible={!!weapon}>
           <EquippedWeapon
             ref={weaponRef}
@@ -137,6 +231,7 @@ const PlayerBody = forwardRef<THREE.Group, PlayerBodyProps>(
           />
         </group>
 
+        {/* ── Player HUD: name + health bar ───────────────────────────────── */}
         <Html position={[0, 2.5, 0]} center distanceFactor={10} occlude>
           <div className="pointer-events-none relative top-8 select-none">
             <div className="mb-2 flex justify-center">
@@ -155,6 +250,20 @@ const PlayerBody = forwardRef<THREE.Group, PlayerBodyProps>(
                   >
                     {displayName}
                   </span>
+                  {/* Shield badge */}
+                  {spawnShield && (
+                    <span
+                      className="font-mono font-bold uppercase tracking-wider"
+                      style={{
+                        fontSize: "0.4rem",
+                        color: "#38bdf8",
+                        textShadow: "0 0 6px #38bdf880",
+                        animation: "pulse 1s ease-in-out infinite",
+                      }}
+                    >
+                      ⬡ SHIELD
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
