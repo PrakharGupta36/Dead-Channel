@@ -16,7 +16,6 @@ import WeaponSpawner from "@/components/weapons/Weapon-Spawner";
 import { Controls } from "@/lib/controls";
 import PerformanceStats from "../game-ui/debug/PerformanceStats";
 
-import ControlsUI from "../game-ui/hud/Controls-UI";
 import Crosshair from "../game-ui/hud/CrossHair";
 import Leaderboard from "../game-ui/hud/Leaderboard";
 import BulletSystem from "../weapons/Bullet-System";
@@ -57,7 +56,6 @@ const cameraOptions = {
 const MemoizedPerformanceStats = memo(PerformanceStats);
 const MemoizedLeaderboard = memo(Leaderboard);
 const MemoizedActivityLog = memo(ActivityLog);
-const MemoizedControlsUI = memo(ControlsUI);
 
 export default function Scene({ gameStarted }: SceneProps) {
   const localPlayerRef = useRef<any>(null);
@@ -151,7 +149,7 @@ export default function Scene({ gameStarted }: SceneProps) {
         </KeyboardControls>
 
         {gameStarted && matchState === "PLAYING" && <MemoizedActivityLog />}
-        {gameStarted && matchState === "PLAYING" && <MemoizedControlsUI />}
+        {gameStarted && matchState === "PLAYING"}
       </div>
 
       {/* GAME OVER CARD DISPLAY */}
