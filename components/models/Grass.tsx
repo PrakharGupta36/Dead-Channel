@@ -35,7 +35,6 @@ const SIMPLEX_GLSL = /* glsl */ `
   }
 `;
 
-
 const globalWindUniforms = {
   uTime: { value: 0 },
   uWindStrength: { value: new THREE.Vector3(0.3, 0, 0.3) },
@@ -65,7 +64,6 @@ function buildWindMaterial(
       SIMPLEX_GLSL + `\nvoid main() {`,
     );
 
-    // Instanced specific high-speed positional sway mapping code block injection
     const projectVertex = /* glsl */ `
       vec4 mvPosition = instanceMatrix * vec4(transformed, 1.0);
       float windOffset = 6.2831853 * simplex2d((modelMatrix * mvPosition).xz / uWindScale);
@@ -91,99 +89,174 @@ export interface GrassOptions {
   scale?: number;
   size?: { x: number; y: number; z: number };
   sizeVariation?: { x: number; y: number; z: number };
+  chunkDivisions?: number;
+  maxRenderDistance?: number;
 }
 
 const DEFAULTS: Required<GrassOptions> = {
   instanceCount: 75000,
   maxInstanceCount: 90000,
-  scale: 300,
+  scale: 200,
   size: { x: 0.9, y: 0.8, z: 0.9 },
   sizeVariation: { x: 0.2, y: 0.3, z: 0.2 },
+  chunkDivisions: 8, // 8x8 = 64 independently-cullable InstancedMesh chunks
+  maxRenderDistance: 140, // world units — chunks beyond this stop rendering
 };
+
+interface GrassChunk {
+  mesh: THREE.InstancedMesh;
+  center: THREE.Vector3;
+}
 
 export function GrassField(props: GrassOptions) {
   const opts = { ...DEFAULTS, ...props } as Required<GrassOptions>;
   const { scene: grassScene } = useGLTF("/models/Grass.glb");
-  const meshRef = useRef<THREE.InstancedMesh>(null);
+  const chunksRef = useRef<GrassChunk[]>([]);
 
-  // 1. Visually build the InstancedMesh parameters once via useMemo
-  const grassMesh = useMemo(() => {
+  const chunks = useMemo(() => {
     const sourceMesh = grassScene.children[0] as THREE.Mesh;
-    if (!sourceMesh?.geometry) return null;
+    if (!sourceMesh?.geometry) return [];
 
-    // OPTIMIZATION: Switched Phong to Basic to completely bypass lighting calculation overdraw loops
-    const baseMat = new THREE.MeshBasicMaterial({
-      map: (sourceMesh.material as THREE.MeshBasicMaterial).map,
-      transparent: false,
-      alphaTest: 0.6, // Higher cutoff discards fuzzy pixels earlier
-      depthWrite: true,
-      depthTest: true,
-      side: THREE.DoubleSide,
-    });
+    sourceMesh.geometry.computeBoundingBox();
+    sourceMesh.geometry.computeBoundingSphere();
 
-    const mat = buildWindMaterial(baseMat);
-    const mesh = new THREE.InstancedMesh(
-      sourceMesh.geometry,
-      mat,
-      opts.maxInstanceCount,
+    // One shared material → one shader compile total. Building a fresh
+    // MeshBasicMaterial per chunk (as a naive chunked version would) forces
+    // a separate onBeforeCompile shader program compilation per chunk —
+    // 64 compiles instead of 1 — and prevents the renderer from keeping the
+    // same GL program bound across draw calls.
+    const sharedMaterial = buildWindMaterial(
+      new THREE.MeshBasicMaterial({
+        map: (sourceMesh.material as THREE.MeshBasicMaterial).map,
+        transparent: false,
+        alphaTest: 0.6,
+        depthWrite: true,
+        depthTest: true,
+        side: THREE.DoubleSide,
+      }),
     );
+
+    const divisions = Math.max(1, Math.floor(opts.chunkDivisions));
+    const totalChunks = divisions * divisions;
+    const chunkSize = opts.scale / divisions;
+    const halfScale = opts.scale * 0.5;
+
+    const instancesPerChunk = Math.ceil(opts.instanceCount / totalChunks);
+    const maxPerChunk = Math.ceil(opts.maxInstanceCount / totalChunks);
 
     const dummy = new THREE.Object3D();
     const color = new THREE.Color();
-    let count = 0;
+    const result: GrassChunk[] = [];
 
-    // Use single float allocations inside loop iterations to prevent GC churn sweeps
-    const halfScale = opts.scale * 0.5;
+    for (let cx = 0; cx < divisions; cx++) {
+      for (let cz = 0; cz < divisions; cz++) {
+        const chunkMinX = -halfScale + cx * chunkSize;
+        const chunkMinZ = -halfScale + cz * chunkSize;
 
-    for (let i = 0; i < opts.maxInstanceCount; i++) {
-      const px = (Math.random() - 0.5) * opts.scale;
-      const pz = (Math.random() - 0.5) * opts.scale;
+        const mesh = new THREE.InstancedMesh(
+          sourceMesh.geometry,
+          sharedMaterial,
+          maxPerChunk,
+        );
 
-      // Fast check out-of-bounds math logic sweep optimization
-      if (Math.abs(px) > halfScale || Math.abs(pz) > halfScale) continue;
+        // Generate directly inside this chunk's rectangle instead of
+        // scattering globally then filtering — the original filter
+        // (`Math.abs(px) > halfScale`) could never actually trigger since
+        // px was already constrained to that exact range, so it was a
+        // no-op check, not a bounds guard.
+        let placed = 0;
+        for (let i = 0; i < instancesPerChunk; i++) {
+          const px = chunkMinX + Math.random() * chunkSize;
+          const pz = chunkMinZ + Math.random() * chunkSize;
+          const py = getTerrainHeight(px, pz);
 
-      const py = getTerrainHeight(px, pz);
+          dummy.position.set(px, py, pz);
+          dummy.rotation.set(0, Math.random() * 6.28318, 0);
+          dummy.scale.set(
+            opts.sizeVariation.x * Math.random() + opts.size.x,
+            opts.sizeVariation.y * Math.random() + opts.size.y,
+            opts.sizeVariation.z * Math.random() + opts.size.z,
+          );
+          dummy.updateMatrix();
 
-      dummy.position.set(px, py, pz);
-      dummy.rotation.set(0, Math.random() * 6.28318, 0);
-      dummy.scale.set(
-        opts.sizeVariation.x * Math.random() + opts.size.x,
-        opts.sizeVariation.y * Math.random() + opts.size.y,
-        opts.sizeVariation.z * Math.random() + opts.size.z,
-      );
-      dummy.updateMatrix();
+          color.setRGB(
+            0.18 + Math.random() * 0.08,
+            0.24 + Math.random() * 0.15,
+            0.08,
+          );
 
-      // Variations of lush wilderness greens matching vertex ranges natively
-      color.setRGB(
-        0.18 + Math.random() * 0.08,
-        0.24 + Math.random() * 0.15,
-        0.08,
-      );
+          mesh.setMatrixAt(placed, dummy.matrix);
+          mesh.setColorAt(placed, color);
+          placed++;
+        }
 
-      mesh.setMatrixAt(count, dummy.matrix);
-      mesh.setColorAt(count, color);
-      count++;
+        mesh.count = placed;
+
+        // Instance transforms never change after setup — grass doesn't
+        // move — so hint the driver these buffers are write-once instead
+        // of the default "changes every frame" assumption.
+        mesh.instanceMatrix.setUsage(THREE.StaticDrawUsage);
+        mesh.instanceMatrix.needsUpdate = true;
+        if (mesh.instanceColor) {
+          mesh.instanceColor.setUsage(THREE.StaticDrawUsage);
+          mesh.instanceColor.needsUpdate = true;
+        }
+
+        // Real per-chunk frustum culling: computed from this chunk's own
+        // instance matrices, so the renderer can skip an entire chunk's
+        // draw call when it's off-screen instead of treating all ~75k
+        // blades as one always-visible object (InstancedMesh's default
+        // bounding sphere comes from the single blade geometry and doesn't
+        // account for spread-out instances, so without this the whole
+        // field either never culls or culls incorrectly).
+        mesh.computeBoundingSphere();
+        mesh.frustumCulled = true;
+
+        // Mesh transform itself is identity and static — skip the
+        // per-frame local matrix recompute React Three Fiber would
+        // otherwise do via matrixAutoUpdate.
+        mesh.matrixAutoUpdate = false;
+        mesh.updateMatrix();
+
+        mesh.castShadow = false;
+        mesh.receiveShadow = false;
+
+        result.push({
+          mesh,
+          center: new THREE.Vector3(
+            chunkMinX + chunkSize / 2,
+            0,
+            chunkMinZ + chunkSize / 2,
+          ),
+        });
+      }
     }
 
-    mesh.count = Math.min(opts.instanceCount, count);
-    mesh.instanceMatrix.needsUpdate = true;
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-
-    // Explicitly disable heavy shadow rendering maps for mass instanced micro items
-    mesh.castShadow = false;
-    mesh.receiveShadow = false;
-
-    return mesh;
+    // eslint-disable-next-line react-hooks/refs
+    chunksRef.current = result;
+    return result;
   }, [grassScene]);
 
-  // 2. Direct fast tick update thread binding loops
-  useFrame(({ clock }) => {
+  useFrame(({ clock, camera }) => {
     globalWindUniforms.uTime.value = clock.getElapsedTime();
+
+    const maxDistSq = opts.maxRenderDistance * opts.maxRenderDistance;
+    for (const chunk of chunksRef.current) {
+      const dx = camera.position.x - chunk.center.x;
+      const dz = camera.position.z - chunk.center.z;
+      chunk.mesh.visible = dx * dx + dz * dz < maxDistSq;
+    }
   });
 
-  if (!grassMesh) return null;
+  if (chunks.length === 0) return null;
 
-  return <primitive object={grassMesh} ref={meshRef} />;
+  return (
+    <>
+      {chunks.map((chunk, i) => (
+        <primitive key={i} object={chunk.mesh} />
+      ))}
+    </>
+  );
 }
 
 GrassField.preload = () => {

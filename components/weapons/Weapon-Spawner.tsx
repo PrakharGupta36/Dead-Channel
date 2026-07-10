@@ -24,8 +24,8 @@ const FLOAT_AMPLITUDE = 0.18;
 // ── Exact weapon pool: 15 pistols, 8 ak47s, 7 smgs ──
 const WEAPON_POOL: WeaponType[] = [
   ...Array(19).fill("pistol"),
-  ...Array(6).fill("ak47"),
-  ...Array(5).fill("smg"),
+  ...Array(16).fill("ak47"),
+  ...Array(15).fill("smg"),
 ] as WeaponType[];
 
 const GLOW_COLORS: Record<WeaponType, THREE.Color> = {

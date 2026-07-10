@@ -1,22 +1,28 @@
 "use client";
 
-import { GrassField } from "@/components/models/Grass";
 import { shaderMaterial, useTexture } from "@react-three/drei";
 import { extend, useFrame } from "@react-three/fiber";
-import { RigidBody, TrimeshCollider } from "@react-three/rapier";
+import {
+  CuboidCollider,
+  RigidBody,
+  TrimeshCollider,
+} from "@react-three/rapier";
 import { memo, useMemo } from "react";
 import * as THREE from "three";
+import { GrassField } from "../models/Grass";
 
 // ---------------------------------------------------------------------------
-// Shader material (unchanged from original)
+// Shader material — stylized toon ground, now texture-driven
 // ---------------------------------------------------------------------------
 const GroundMaterial = shaderMaterial(
   {
-    grassTexture: null,
-    dirtTexture: null,
-    dirtNormal: null,
     noiseScale: 140,
     patchiness: 0.55,
+    bandSteps: 3,
+    textureScale: 9, // world units per texture tile
+    grassMap: null,
+    dirtMap: null,
+    dirtNormalMap: null,
   },
 
   /* vertex */ `
@@ -32,11 +38,13 @@ const GroundMaterial = shaderMaterial(
   `,
 
   /* fragment */ `
-  uniform sampler2D grassTexture;
-  uniform sampler2D dirtTexture;
-  uniform sampler2D dirtNormal;
   uniform float noiseScale;
   uniform float patchiness;
+  uniform float bandSteps;
+  uniform float textureScale;
+  uniform sampler2D grassMap;
+  uniform sampler2D dirtMap;
+  uniform sampler2D dirtNormalMap;
 
   varying vec3 vWorldPosition;
   varying vec3 vNormal;
@@ -68,17 +76,39 @@ const GroundMaterial = shaderMaterial(
   }
 
   void main() {
-    vec2 worldUv = vWorldPosition.xz / 30.0;
-    vec3 grass   = texture2D(grassTexture, worldUv).rgb;
-    vec3 dirt    = texture2D(dirtTexture,  worldUv).rgb;
-    float n      = 0.5 + 0.5*simplex2d(vWorldPosition.xz / noiseScale);
-    float blend  = smoothstep(patchiness-0.1, patchiness+0.1, n);
-    vec3 baseColor = mix(grass, dirt, blend);
-    vec3 lightDir  = normalize(vec3(1.0, 1.5, 0.5));
-    float diffuse  = max(dot(normalize(vNormal), lightDir), 0.0);
-    vec3 ambient   = baseColor * 0.4;
-    vec3 lighting  = baseColor * diffuse * 0.8;
-    gl_FragColor   = vec4(ambient + lighting, 1.0);
+    vec2 tileUv = vWorldPosition.xz / textureScale;
+
+    vec3 grassColor = texture2D(grassMap, tileUv).rgb;
+    vec3 dirtColor  = texture2D(dirtMap, tileUv).rgb;
+    vec3 dirtNrm    = texture2D(dirtNormalMap, tileUv).rgb * 2.0 - 1.0;
+
+    // large-scale patchiness between grass and dirt textures
+    float n1    = 0.5 + 0.5*simplex2d(vWorldPosition.xz / noiseScale);
+    float blend = smoothstep(patchiness-0.15, patchiness+0.15, n1);
+    vec3 baseColor = mix(grassColor, dirtColor, blend);
+
+    // small-scale mottling so it doesn't read as a flat fill
+    float n2 = simplex2d(vWorldPosition.xz * 0.35);
+    baseColor += n2 * 0.03;
+
+    // perturb normal only where dirt shows through (ground is ~flat,
+    // so world axes double as a cheap tangent basis — no tangent attrs needed)
+    vec3 tangent   = vec3(1.0, 0.0, 0.0);
+    vec3 bitangent = vec3(0.0, 0.0, 1.0);
+    vec3 bumpedNormal = normalize(
+      tangent * dirtNrm.x + bitangent * dirtNrm.y + vNormal * dirtNrm.z
+    );
+    vec3 finalNormal = normalize(mix(vNormal, bumpedNormal, blend * 0.6));
+
+    // toon / cel-shaded lighting — banded instead of smooth gradient
+    vec3 lightDir = normalize(vec3(1.0, 1.5, 0.5));
+    float diffuse = max(dot(finalNormal, lightDir), 0.0);
+    float banded  = floor(diffuse * bandSteps) / bandSteps;
+
+    vec3 ambient  = baseColor * 0.55;
+    vec3 lighting = baseColor * (0.45 + banded * 0.55);
+
+    gl_FragColor = vec4(ambient * 0.4 + lighting * 0.6, 1.0);
   }
   `,
 );
@@ -88,11 +118,13 @@ extend({ GroundMaterial });
 declare module "@react-three/fiber" {
   interface ThreeElements {
     groundMaterial: {
-      grassTexture: THREE.Texture;
-      dirtTexture: THREE.Texture;
-      dirtNormal: THREE.Texture;
       noiseScale?: number;
       patchiness?: number;
+      bandSteps?: number;
+      textureScale?: number;
+      grassMap?: THREE.Texture | null;
+      dirtMap?: THREE.Texture | null;
+      dirtNormalMap?: THREE.Texture | null;
     };
   }
 }
@@ -123,10 +155,30 @@ interface GroundProps {
 // ---------------------------------------------------------------------------
 const Ground = memo(function Ground({
   size = 300,
-  segments = 128,
+  segments = 48, // was 128 — flat ground doesn't need dense tessellation for shape,
+  // texture/normal-map detail carries the visual richness instead
   playerRef,
   children,
 }: GroundProps) {
+  // ---- textures --------------------------------------------------------
+  const [grassMap, dirtMap, dirtNormalMap] = useTexture([
+    "/textures/ground/grass.jpg",
+    "/textures/ground/dirt_color.jpg",
+    "/textures/ground/dirt_normal.jpg",
+  ]);
+
+  useMemo(() => {
+    [grassMap, dirtMap, dirtNormalMap].forEach((tex) => {
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      // Modest anisotropy — visual quality at grazing angles without the
+      // GPU cost of maxing it out on every sample.
+      tex.anisotropy = 4;
+    });
+    grassMap.colorSpace = THREE.SRGBColorSpace;
+    dirtMap.colorSpace = THREE.SRGBColorSpace;
+    // normal maps stay linear — no colorSpace assignment
+  }, [grassMap, dirtMap, dirtNormalMap]);
+
   // ---- geometry (visual + physics share the same computed positions) -------
   const geometry = useMemo(() => {
     const geo = new THREE.PlaneGeometry(size, size, segments, segments);
@@ -141,41 +193,35 @@ const Ground = memo(function Ground({
     return geo;
   }, [size, segments]);
 
-  // ---- trimesh arrays (extracted once from the same geometry) --------------
-  // TrimeshCollider from @react-three/rapier expects:
-  //   vertices : Float32Array  (flat x,y,z per vertex)
-  //   indices  : Uint32Array   (triangle indices)
-  const { trimeshVertices, trimeshIndices } = useMemo(() => {
+  // ---- collider strategy: skip trimesh entirely when the terrain is flat ---
+  // Building + simulating a trimesh against a perfectly flat surface is wasted
+  // broadphase/narrowphase work. Detect real height variation and only pay
+  // for a trimesh when the terrain actually needs it.
+  const { isFlat, trimeshVertices, trimeshIndices } = useMemo(() => {
     const posAttr = geometry.attributes.position as THREE.BufferAttribute;
 
-    // vertices: plain Float32Array copy
-    const trimeshVertices = new Float32Array(posAttr.array);
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (let i = 0; i < posAttr.count; i++) {
+      const y = posAttr.getY(i);
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+    const flat = maxY - minY < 1e-4;
 
-    // indices: PlaneGeometry always generates an indexed buffer
+    if (flat) {
+      return { isFlat: true, trimeshVertices: null, trimeshIndices: null };
+    }
+
+    const trimeshVertices = new Float32Array(posAttr.array);
     const idx = geometry.index!;
     const trimeshIndices = new Uint32Array(idx.count);
     for (let i = 0; i < idx.count; i++) {
       trimeshIndices[i] = idx.getX(i);
     }
 
-    return { trimeshVertices, trimeshIndices };
+    return { isFlat: false, trimeshVertices, trimeshIndices };
   }, [geometry]);
-
-  // ---- textures -----------------------------------------------------------
-  const [grassTexture, dirtTexture, dirtNormal] = useTexture([
-    "/textures/ground/grass.jpg",
-    "/textures/ground/dirt_color.jpg",
-    "/textures/ground/dirt_normal.jpg",
-  ]);
-
-  useMemo(() => {
-    [grassTexture, dirtTexture, dirtNormal].forEach((tex) => {
-      tex.wrapS = THREE.RepeatWrapping;
-      tex.wrapT = THREE.RepeatWrapping;
-      tex.colorSpace = THREE.SRGBColorSpace;
-      tex.anisotropy = 32;
-    });
-  }, [grassTexture, dirtTexture, dirtNormal]);
 
   // ---- fall-through guard --------------------------------------------------
   useFrame(() => {
@@ -187,22 +233,32 @@ const Ground = memo(function Ground({
 
   return (
     <>
-      {/* ---- physics body with trimesh that matches real geometry ---- */}
+      {/* ---- physics body: cheap cuboid when flat, trimesh only when needed ---- */}
       <RigidBody type="fixed" colliders={false}>
         <mesh geometry={geometry} receiveShadow>
           <groundMaterial
-            grassTexture={grassTexture}
-            dirtTexture={dirtTexture}
-            dirtNormal={dirtNormal}
             noiseScale={140}
             patchiness={0.55}
+            bandSteps={3}
+            textureScale={9}
+            grassMap={grassMap}
+            dirtMap={dirtMap}
+            dirtNormalMap={dirtNormalMap}
           />
         </mesh>
 
-        <TrimeshCollider args={[trimeshVertices, trimeshIndices]} />
+        {isFlat ? (
+          <CuboidCollider
+            args={[size / 2, 0.05, size / 2]}
+            position={[0, -0.05, 0]}
+          />
+        ) : (
+          <TrimeshCollider args={[trimeshVertices!, trimeshIndices!]} />
+        )}
       </RigidBody>
 
-      <GrassField  />
+      {/* <Foliage size={size} /> */}
+      <GrassField />
 
       {children}
     </>
